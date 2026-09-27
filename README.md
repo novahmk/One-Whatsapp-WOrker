@@ -22,12 +22,13 @@ WaSenderAPI ──webhook──▶ POST /webhooks/whatsapp
                               │
               papel gestor? ─▶ POST {ONE_APP_URL}/api/public/whatsapp/comandos/criar-tarefa
                               │
-              confirmação via WaSenderAPI + agenda do responsável (notificarAgenda)
+              confirmação ao remetente via WaSenderAPI (dados locais)
 
 node-cron (a cada 15 min) ─▶ GET {ONE_APP_URL}/api/public/whatsapp/avisos-do-dia
                           ─▶ envia resumos com delay anti-rajada (1,5–2s)
 
 One App ──POST /verificacao──▶ envia código de verificação via WhatsApp
+One App ──POST /notificar────▶ envia notificação formatada (ex.: tarefa atribuída)
 ```
 
 ## Rodando
@@ -80,12 +81,12 @@ Ver [.env.example](.env.example). Obrigatórias (sem `MOCK_EXTERNAL=true`):
   WaSenderAPI não reenviar o payload.
 - **Autorização**: só perfis com `papel = 'gestor'` criam tarefas; outros
   recebem recusa e o evento é logado como `nao_autorizado`.
-- **Telefone não reconhecido**: sem chamar a Anthropic, o remetente recebe
+- **Telefone não reconhecido**: sem chamar a OpenAI, o remetente recebe
   orientação para pedir liberação ao gestor e o evento é logado como
   `nao_reconhecido`.
-- **Agenda pós-criação**: quando o ONE confirma a tarefa (com
-  `responsavel_profile_id`), o responsável recebe na hora a agenda da data do
-  prazo (`notificarAgenda`), sem dedupe diário.
+- **Notificação do responsável é do One App**: após criar a tarefa, o worker só
+  confirma ao remetente (dados locais); o One App avisa o responsável chamando
+  `POST /notificar`.
 - **Pendências expiram em 24h** (ignoradas na busca).
 
 ## Contratos consumidos do app ONE
@@ -93,7 +94,8 @@ Ver [.env.example](.env.example). Obrigatórias (sem `MOCK_EXTERNAL=true`):
 Todas as chamadas usam o header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}`.
 
 `POST {ONE_APP_URL}/api/public/whatsapp/comandos/criar-tarefa`
-— body `{ clinica_id, criado_por_profile_id, responsavel_nome, descricao, prazo }`
+— body `{ clinica_id, criado_por_profile_id, responsavel_nome, descricao, prazo, horario }`
+  (`horario` HH:MM ou `null`; o Lovable mapeia para `horario_sugerido`)
 — resposta `{ sucesso: boolean, tarefa_id?: string, responsavel_profile_id?: string, erro?: string }`
 
 `GET {ONE_APP_URL}/api/public/whatsapp/avisos-do-dia[?profile_id=...&data=YYYY-MM-DD]`
@@ -112,6 +114,12 @@ Todas as chamadas usam o header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}
 — body `{ telefone: "5511999999999", nome: "Carlos Silva", codigo: "123456" }`
 — envia o código por WhatsApp e responde `{ sucesso: true }`;
   401 sem/segredo errado, 400 body inválido, 500 `{ erro }` se o envio falhar
+
+`POST /notificar`
+— header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}`
+— body `{ telefone, tipo: "tarefa_atribuida", dados: { titulo, data_vencimento, horario_sugerido?, criado_por_nome } }`
+— mensagem: "Você tem uma nova tarefa: {titulo}, para {data_vencimento}[ às {horario_sugerido}]. Criada por {criado_por_nome}."
+— mesmos códigos de resposta do `/verificacao`; novos `tipo`s são extensão futura
 
 ## Checklist antes de sair do modo mock
 

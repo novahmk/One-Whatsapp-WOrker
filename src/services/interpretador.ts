@@ -23,6 +23,11 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             description:
               'Prazo no formato YYYY-MM-DD, resolvido a partir da data atual quando relativo (ex: "sexta", "amanhã"). Omitir se não houver prazo.',
           },
+          horario: {
+            type: 'string',
+            description:
+              'Horário no formato HH:MM quando mencionado (ex: "às 14h" → "14:00", "meio-dia" → "12:00"). Omitir quando a mensagem não menciona horário.',
+          },
         },
         required: ['responsavel', 'descricao'],
       },
@@ -60,6 +65,7 @@ export function criarInterpretador(cfg: Config): Deps['interpretar'] {
             'Você é o assistente de WhatsApp do ONE, um sistema de gestão de clínicas.',
             'Gestores mandam mensagens em português pedindo para criar tarefas para colaboradores.',
             `Data atual: ${dataAtual}. Resolva prazos relativos ("amanhã", "sexta") para YYYY-MM-DD.`,
+            'Extraia também o horário quando mencionado ("às 14h" → 14:00, "meio-dia" → 12:00); sem menção de horário, não preencha o campo horario.',
             `Colaboradores da clínica: ${colaboradores.join(', ')}.`,
             'Se o pedido for claro, chame criar_tarefa. Se faltar informação essencial, chame pedir_esclarecimento.',
             'Se a mensagem não tiver relação com tarefas, responda brevemente explicando o que você sabe fazer.',
@@ -80,6 +86,7 @@ export function criarInterpretador(cfg: Config): Deps['interpretar'] {
           responsavel: String(args.responsavel ?? ''),
           descricao: String(args.descricao ?? ''),
           prazo: args.prazo ? String(args.prazo) : undefined,
+          horario: args.horario ? String(args.horario) : undefined,
         };
       }
       if (call.function.name === 'pedir_esclarecimento') {

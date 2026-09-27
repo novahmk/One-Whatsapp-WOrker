@@ -10,7 +10,6 @@ import {
 } from '../types';
 import { dataLocalISO } from '../util/tempo';
 import { resolverResponsavel } from './resolverResponsavel';
-import { notificarAgenda } from './notificarAgenda';
 
 type BaseLog = Omit<LogEntrada, 'resultado' | 'tarefa_id' | 'interpretacao'>;
 
@@ -124,6 +123,7 @@ async function fluxoCriarTarefa(
       contexto: {
         descricao: interpretacao.descricao,
         prazo: interpretacao.prazo,
+        horario: interpretacao.horario,
         candidatos: res.candidatos.map(({ id, nome_completo }) => ({ id, nome_completo })),
       },
     });
@@ -146,6 +146,7 @@ async function fluxoCriarTarefa(
     res.colaborador,
     interpretacao.descricao,
     interpretacao.prazo,
+    interpretacao.horario,
     { ...base },
     interpretacao,
     deps,
@@ -178,8 +179,9 @@ async function tratarRespostaPendente(
     res.colaborador,
     contexto.descricao,
     contexto.prazo,
+    contexto.horario,
     base,
-    { tipo: 'criar_tarefa', responsavel: res.colaborador.nome_completo, descricao: contexto.descricao, prazo: contexto.prazo },
+    { tipo: 'criar_tarefa', responsavel: res.colaborador.nome_completo, descricao: contexto.descricao, prazo: contexto.prazo, horario: contexto.horario },
     deps,
   );
 }
@@ -189,6 +191,7 @@ async function criarEConfirmar(
   responsavel: Colaborador,
   descricao: string,
   prazo: string | undefined,
+  horario: string | undefined,
   base: BaseLog,
   interpretacao: Interpretacao,
   deps: Deps,
@@ -208,10 +211,12 @@ async function criarEConfirmar(
     responsavel_nome: responsavel.nome_completo,
     descricao,
     prazo,
+    horario: horario ?? null,
   });
 
   if (resultado.sucesso) {
-    const sufixoPrazo = prazo ? ` (prazo: ${prazo})` : '';
+    const sufixoHorario = horario ? ` às ${horario}` : '';
+    const sufixoPrazo = prazo ? ` (prazo: ${prazo}${sufixoHorario})` : sufixoHorario;
     await deps.whats.enviarMensagem(
       base.telefone,
       `✅ Tarefa criada para ${responsavel.nome_completo}: "${descricao}"${sufixoPrazo}.`,
@@ -222,13 +227,6 @@ async function criarEConfirmar(
       resultado: 'tarefa_criada',
       tarefa_id: resultado.tarefa_id,
     });
-    if (resultado.responsavel_profile_id) {
-      try {
-        await notificarAgenda(deps, resultado.responsavel_profile_id, prazo, { dedupe: false });
-      } catch (e) {
-        console.error('Falha ao notificar agenda do responsável:', e);
-      }
-    }
   } else {
     await deps.whats.enviarMensagem(
       base.telefone,

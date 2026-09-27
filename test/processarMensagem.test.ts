@@ -13,6 +13,7 @@ describe('processarMensagem', () => {
       responsavel: 'Carla Lima',
       descricao: 'organizar os prontuários',
       prazo: '2026-10-02',
+      horario: '14:00',
     });
 
     await processarMensagem(
@@ -27,17 +28,31 @@ describe('processarMensagem', () => {
       criado_por_profile_id: 'perfil-ana',
       responsavel_nome: 'Carla Lima',
       prazo: '2026-10-02',
+      horario: '14:00',
     });
-    expect(
-      estado.enviadas.some((e) => e.texto.includes('Tarefa criada para Carla Lima')),
-    ).toBe(true);
-    expect(estado.logs.find((l) => l.resultado === 'tarefa_criada')).toMatchObject({
-      tarefa_id: 'mock-tarefa-1',
+    // Confirmação ao remetente é montada só com dados locais — última mensagem e último log.
+    expect(estado.enviadas.at(-1)?.telefone).toBe(TELEFONE_GESTORA);
+    expect(estado.enviadas.at(-1)?.texto).toContain('Tarefa criada para Carla Lima');
+    expect(estado.enviadas.at(-1)?.texto).toContain('prazo: 2026-10-02 às 14:00');
+    expect(estado.logs.at(-1)).toMatchObject({ resultado: 'tarefa_criada', tarefa_id: 'mock-tarefa-1' });
+  });
+
+  it('tarefa sem horário envia horario null ao ONE', async () => {
+    const { deps, estado } = criarDepsMock();
+    deps.interpretar = async () => ({
+      tipo: 'criar_tarefa',
+      responsavel: 'Carla Lima',
+      descricao: 'organizar os prontuários',
     });
-    // Responsável recebe a agenda atualizada logo após a criação.
-    expect(estado.enviadas.at(-1)?.telefone).toBe(TELEFONE_COLABORADORA);
-    expect(estado.enviadas.at(-1)?.texto).toContain('Bom dia, Carla Lima');
-    expect(estado.logs.at(-1)?.resultado).toBe('aviso_enviado');
+
+    await processarMensagem(
+      { messageId: 'm1', telefone: TELEFONE_GESTORA, texto: 'cria tarefa pra Carla' },
+      deps,
+      cfg,
+    );
+
+    expect(estado.tarefas[0].horario).toBeNull();
+    expect(estado.enviadas.at(-1)?.texto).not.toContain('às');
   });
 
   it('nome ambíguo gera pergunta e conversa pendente; resposta resolve e cria', async () => {
@@ -141,9 +156,8 @@ describe('processarMensagem', () => {
 
     expect(estado.tarefas).toHaveLength(1);
     expect(estado.tarefas[0].responsavel_nome).toBe('Carla Lima');
-    const logTarefa = estado.logs.find((l) => l.resultado === 'tarefa_criada');
-    expect(logTarefa).toMatchObject({ tipo: 'audio', resultado: 'tarefa_criada' });
-    expect(logTarefa?.transcricao).toContain('Carla Lima');
+    expect(estado.logs.at(-1)).toMatchObject({ tipo: 'audio', resultado: 'tarefa_criada' });
+    expect(estado.logs.at(-1)?.transcricao).toContain('Carla Lima');
   });
 
   it('falha na transcrição responde pedindo texto e loga erro, sem quebrar o webhook', async () => {

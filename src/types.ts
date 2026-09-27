@@ -22,13 +22,14 @@ export interface MensagemRecebida {
 }
 
 export type Interpretacao =
-  | { tipo: 'criar_tarefa'; responsavel: string; descricao: string; prazo?: string }
+  | { tipo: 'criar_tarefa'; responsavel: string; descricao: string; prazo?: string; horario?: string }
   | { tipo: 'pedir_esclarecimento'; pergunta: string }
   | { tipo: 'sem_acao'; resposta: string };
 
 export interface ContextoPendente {
   descricao: string;
   prazo?: string;
+  horario?: string;
   candidatos: Colaborador[];
 }
 
@@ -73,6 +74,7 @@ export interface CriarTarefaBody {
   responsavel_nome: string;
   descricao: string;
   prazo?: string;
+  horario?: string | null;
 }
 
 export interface CriarTarefaResposta {
