@@ -23,15 +23,25 @@ export interface MensagemRecebida {
 
 export type Interpretacao =
   | { tipo: 'criar_tarefa'; responsavel: string; descricao: string; prazo?: string; horario?: string }
+  | { tipo: 'consultar_agenda'; data?: string }
+  | { tipo: 'concluir_tarefa'; titulo: string }
   | { tipo: 'pedir_esclarecimento'; pergunta: string }
   | { tipo: 'sem_acao'; resposta: string };
 
-export interface ContextoPendente {
-  descricao: string;
-  prazo?: string;
-  horario?: string;
-  candidatos: Colaborador[];
+export interface TarefaRef {
+  id: string;
+  titulo: string;
 }
+
+export type ContextoPendente =
+  | {
+      tipo: 'responsavel';
+      descricao: string;
+      prazo?: string;
+      horario?: string;
+      candidatos: Colaborador[];
+    }
+  | { tipo: 'concluir'; profile_id: string; candidatos: TarefaRef[] };
 
 export interface ConversaPendente {
   id: string;
@@ -46,6 +56,9 @@ export interface ConversaPendente {
 
 export type ResultadoLog =
   | 'tarefa_criada'
+  | 'agenda_consultada'
+  | 'tarefa_concluida'
+  | 'tarefa_nao_encontrada'
   | 'esclarecimento_solicitado'
   | 'esclarecimento_repetido'
   | 'nao_autorizado'
@@ -84,6 +97,20 @@ export interface CriarTarefaResposta {
   erro?: string;
 }
 
+export interface ConcluirTarefaBody {
+  profile_id: string;
+  titulo_aproximado?: string;
+  tarefa_id?: string;
+}
+
+export interface ConcluirTarefaResposta {
+  sucesso: boolean;
+  titulo?: string;
+  ambiguo?: boolean;
+  candidatos?: TarefaRef[];
+  erro?: string;
+}
+
 export interface AvisoPessoa {
   profile_id: string;
   telefone: string;
@@ -116,6 +143,7 @@ export interface Deps {
   interpretar(texto: string, colaboradores: string[], dataAtual: string): Promise<Interpretacao>;
   one: {
     criarTarefa(body: CriarTarefaBody): Promise<CriarTarefaResposta>;
+    concluirTarefa(body: ConcluirTarefaBody): Promise<ConcluirTarefaResposta>;
     buscarAvisosDoDia(filtro?: FiltroAvisos): Promise<AvisoPessoa[]>;
     buscarPerfil(telefone: string): Promise<PerfilResposta>;
   };

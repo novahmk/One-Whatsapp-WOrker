@@ -1,6 +1,7 @@
 import {
   AvisoPessoa,
   Colaborador,
+  ConcluirTarefaBody,
   ConversaPendente,
   CriarTarefaBody,
   Deps,
@@ -18,6 +19,7 @@ export interface EstadoMock {
   logs: (LogEntrada & { created_at: string })[];
   enviadas: { telefone: string; texto: string }[];
   tarefas: CriarTarefaBody[];
+  concluidas: ConcluirTarefaBody[];
   avisos: AvisoPessoa[];
 }
 
@@ -64,6 +66,7 @@ function estadoPadrao(): EstadoMock {
     logs: [],
     enviadas: [],
     tarefas: [],
+    concluidas: [],
     avisos: [
       {
         profile_id: 'perfil-carla',
@@ -172,6 +175,10 @@ export function criarDepsMock(parcial: Partial<EstadoMock> = {}): {
           tarefa_id: `mock-tarefa-${estado.tarefas.length}`,
           responsavel_profile_id: responsavel?.id,
         };
+      },
+      async concluirTarefa(body) {
+        estado.concluidas.push(body);
+        return { sucesso: true, titulo: body.titulo_aproximado ?? body.tarefa_id ?? 'tarefa' };
       },
       async buscarAvisosDoDia(filtro) {
         if (filtro?.profileId) {

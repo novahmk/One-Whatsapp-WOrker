@@ -198,4 +198,86 @@ describe('processarMensagem', () => {
     expect(estado.tarefas).toHaveLength(0);
     expect(estado.logs.at(-1)?.resultado).toBe('erro');
   });
+
+  it('consultar_agenda responde a lista do dia sem criar nada', async () => {
+    const { deps, estado } = criarDepsMock();
+    deps.interpretar = async () => ({ tipo: 'consultar_agenda', data: '2026-09-28' });
+    deps.one.buscarAvisosDoDia = async () => [
+      {
+        profile_id: 'perfil-ana',
+        telefone: TELEFONE_GESTORA,
+        nome: 'Ana Souza',
+        tarefas_hoje: ['Reunião com Bruno às 14h'],
+        tarefas_atrasadas: ['Follow-up cliente X'],
+      },
+    ];
+
+    await processarMensagem(
+      { messageId: 'm1', telefone: TELEFONE_GESTORA, texto: 'o que tenho amanhã?' },
+      deps,
+      cfg,
+    );
+
+    expect(estado.tarefas).toHaveLength(0);
+    expect(estado.enviadas.at(-1)?.texto).toBe(
+      'Pra 2026-09-28 você tem: Reunião com Bruno às 14h, Follow-up cliente X.',
+    );
+    expect(estado.logs.at(-1)?.resultado).toBe('agenda_consultada');
+  });
+
+  it('concluir_tarefa direto marca como concluída', async () => {
+    const { deps, estado } = criarDepsMock();
+    deps.interpretar = async () => ({ tipo: 'concluir_tarefa', titulo: 'relatório mensal' });
+
+    await processarMensagem(
+      { messageId: 'm1', telefone: TELEFONE_GESTORA, texto: 'já entreguei o relatório mensal' },
+      deps,
+      cfg,
+    );
+
+    expect(estado.concluidas).toHaveLength(1);
+    expect(estado.concluidas[0].titulo_aproximado).toBe('relatório mensal');
+    expect(estado.enviadas.at(-1)?.texto).toContain('como concluída');
+    expect(estado.logs.at(-1)?.resultado).toBe('tarefa_concluida');
+  });
+
+  it('concluir_tarefa ambíguo pergunta e a resposta resolve pelo id', async () => {
+    const { deps, estado } = criarDepsMock();
+    deps.interpretar = async () => ({ tipo: 'concluir_tarefa', titulo: 'follow up' });
+    let chamada = 0;
+    deps.one.concluirTarefa = async (body) => {
+      chamada += 1;
+      if (chamada === 1) {
+        return {
+          sucesso: false,
+          ambiguo: true,
+          candidatos: [
+            { id: 't1', titulo: 'Follow up cliente X' },
+            { id: 't2', titulo: 'Follow up cliente Y' },
+          ],
+        };
+      }
+      return { sucesso: true, titulo: 'Follow up cliente Y', tarefa_id: body.tarefa_id };
+    };
+
+    await processarMensagem(
+      { messageId: 'm1', telefone: TELEFONE_GESTORA, texto: 'concluí o follow up' },
+      deps,
+      cfg,
+    );
+
+    expect(estado.conversas).toHaveLength(1);
+    expect(estado.enviadas.at(-1)?.texto).toContain('mais de uma tarefa parecida');
+
+    await processarMensagem(
+      { messageId: 'm2', telefone: TELEFONE_GESTORA, texto: '2' },
+      deps,
+      cfg,
+    );
+
+    expect(estado.conversas[0].status).toBe('resolvida');
+    expect(estado.enviadas.at(-1)?.texto).toContain("Marquei 'Follow up cliente Y' como concluída");
+    expect(estado.logs.at(-1)?.resultado).toBe('tarefa_concluida');
+  });
 });
+

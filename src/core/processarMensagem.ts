@@ -10,6 +10,7 @@ import {
 } from '../types';
 import { dataLocalISO } from '../util/tempo';
 import { resolverResponsavel } from './resolverResponsavel';
+import { resolverTarefa } from './resolverTarefa';
 
 type BaseLog = Omit<LogEntrada, 'resultado' | 'tarefa_id' | 'interpretacao'>;
 
@@ -100,7 +101,79 @@ export async function processarMensagem(
     return;
   }
 
+  if (interpretacao.tipo === 'consultar_agenda') {
+    await fluxoConsultarAgenda(interpretacao, perfil, base, deps, cfg);
+    return;
+  }
+
+  if (interpretacao.tipo === 'concluir_tarefa') {
+    await fluxoConcluirTarefa(interpretacao.titulo, perfil, base, deps);
+    return;
+  }
+
   await fluxoCriarTarefa(interpretacao, perfil, colaboradores, base, deps);
+}
+
+function montarAgenda(data: string, itens: string[]): string {
+  if (itens.length === 0) return `Você não tem nada agendado para ${data}.`;
+  return `Pra ${data} você tem: ${itens.join(', ')}.`;
+}
+
+async function fluxoConsultarAgenda(
+  interpretacao: Extract<Interpretacao, { tipo: 'consultar_agenda' }>,
+  perfil: Perfil,
+  base: BaseLog,
+  deps: Deps,
+  cfg: Config,
+): Promise<void> {
+  const data = interpretacao.data ?? dataLocalISO(cfg.TZ_AVISOS);
+  const avisos = await deps.one.buscarAvisosDoDia({ profileId: perfil.id, data });
+  const aviso = avisos.find((a) => a.profile_id === perfil.id);
+  const itens = aviso ? [...aviso.tarefas_hoje, ...aviso.tarefas_atrasadas] : [];
+  await deps.whats.enviarMensagem(base.telefone, montarAgenda(data, itens));
+  await deps.db.registrarLog({ ...base, interpretacao, resultado: 'agenda_consultada' });
+}
+
+async function fluxoConcluirTarefa(
+  titulo: string,
+  perfil: Perfil,
+  base: BaseLog,
+  deps: Deps,
+): Promise<void> {
+  const resultado = await deps.one.concluirTarefa({
+    profile_id: perfil.id,
+    titulo_aproximado: titulo,
+  });
+
+  if (resultado.ambiguo && resultado.candidatos && resultado.candidatos.length > 0) {
+    const titulos = resultado.candidatos.map((c) => `'${c.titulo}'`);
+    const pergunta = `Encontrei mais de uma tarefa parecida: ${titulos.join(', ')}. Qual delas?`;
+    await deps.db.criarConversaPendente({
+      telefone: base.telefone,
+      clinica_id: perfil.clinica_id,
+      profile_id: perfil.id,
+      pergunta,
+      contexto: { tipo: 'concluir', profile_id: perfil.id, candidatos: resultado.candidatos },
+    });
+    await deps.whats.enviarMensagem(base.telefone, pergunta);
+    await deps.db.registrarLog({ ...base, resultado: 'esclarecimento_solicitado' });
+    return;
+  }
+
+  if (resultado.sucesso) {
+    await deps.whats.enviarMensagem(
+      base.telefone,
+      `Marquei '${resultado.titulo ?? titulo}' como concluída.`,
+    );
+    await deps.db.registrarLog({ ...base, resultado: 'tarefa_concluida', tarefa_id: resultado.titulo });
+    return;
+  }
+
+  await deps.whats.enviarMensagem(
+    base.telefone,
+    `Não encontrei uma tarefa parecida com "${titulo}". Pode conferir o nome?`,
+  );
+  await deps.db.registrarLog({ ...base, resultado: 'tarefa_nao_encontrada' });
 }
 
 async function fluxoCriarTarefa(
@@ -121,6 +194,7 @@ async function fluxoCriarTarefa(
       profile_id: perfil.id,
       pergunta,
       contexto: {
+        tipo: 'responsavel',
         descricao: interpretacao.descricao,
         prazo: interpretacao.prazo,
         horario: interpretacao.horario,
@@ -161,6 +235,11 @@ async function tratarRespostaPendente(
   base: BaseLog,
   deps: Deps,
 ): Promise<void> {
+  if (contexto.tipo === 'concluir') {
+    await tratarRespostaConcluir(resposta, conversaId, contexto, perfil, base, deps);
+    return;
+  }
+
   const res = resolverResponsavel(resposta, contexto.candidatos);
 
   if (res.tipo !== 'unico') {
@@ -184,6 +263,48 @@ async function tratarRespostaPendente(
     { tipo: 'criar_tarefa', responsavel: res.colaborador.nome_completo, descricao: contexto.descricao, prazo: contexto.prazo, horario: contexto.horario },
     deps,
   );
+}
+
+async function tratarRespostaConcluir(
+  resposta: string,
+  conversaId: string,
+  contexto: Extract<ContextoPendente, { tipo: 'concluir' }>,
+  perfil: Perfil,
+  base: BaseLog,
+  deps: Deps,
+): Promise<void> {
+  const res = resolverTarefa(resposta, contexto.candidatos);
+
+  if (res.tipo !== 'unico') {
+    const titulos = contexto.candidatos.map((c) => `'${c.titulo}'`).join(', ');
+    await deps.whats.enviarMensagem(
+      base.telefone,
+      `Não entendi. Responda com uma destas tarefas: ${titulos}.`,
+    );
+    await deps.db.registrarLog({ ...base, resultado: 'esclarecimento_repetido' });
+    return;
+  }
+
+  await deps.db.resolverConversa(conversaId);
+  const resultado = await deps.one.concluirTarefa({
+    profile_id: contexto.profile_id,
+    tarefa_id: res.tarefa.id,
+  });
+
+  if (resultado.sucesso) {
+    await deps.whats.enviarMensagem(
+      base.telefone,
+      `Marquei '${resultado.titulo ?? res.tarefa.titulo}' como concluída.`,
+    );
+    await deps.db.registrarLog({ ...base, resultado: 'tarefa_concluida', tarefa_id: res.tarefa.id });
+    return;
+  }
+
+  await deps.whats.enviarMensagem(
+    base.telefone,
+    `Não consegui concluir a tarefa: ${resultado.erro ?? 'erro desconhecido'}.`,
+  );
+  await deps.db.registrarLog({ ...base, resultado: 'erro' });
 }
 
 async function criarEConfirmar(

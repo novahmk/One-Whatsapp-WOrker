@@ -2,6 +2,8 @@ import { Config } from '../config';
 import {
   AvisoPessoa,
   Colaborador,
+  ConcluirTarefaBody,
+  ConcluirTarefaResposta,
   CriarTarefaBody,
   CriarTarefaResposta,
   Deps,
@@ -27,6 +29,18 @@ export function criarOneApp(cfg: Config): Deps['one'] {
         return { sucesso: false, erro: `ONE respondeu HTTP ${r.status}` };
       }
       return (await r.json()) as CriarTarefaResposta;
+    },
+
+    async concluirTarefa(body: ConcluirTarefaBody): Promise<ConcluirTarefaResposta> {
+      const r = await fetch(`${cfg.ONE_APP_URL}/api/public/whatsapp/comandos/concluir-tarefa`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        return { sucesso: false, erro: `ONE respondeu HTTP ${r.status}` };
+      }
+      return (await r.json()) as ConcluirTarefaResposta;
     },
 
     async buscarAvisosDoDia(filtro?: FiltroAvisos): Promise<AvisoPessoa[]> {

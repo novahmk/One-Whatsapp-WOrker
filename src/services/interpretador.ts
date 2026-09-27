@@ -36,6 +36,42 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'consultar_agenda',
+      description:
+        'Use quando a pessoa só quer saber o que tem para um dia, sem pedir nenhuma ação (ex: "o que tenho amanhã?", "minha agenda de hoje").',
+      parameters: {
+        type: 'object',
+        properties: {
+          data_referencia: {
+            type: 'string',
+            description:
+              'Data no formato YYYY-MM-DD, resolvida a partir da data atual quando relativa ("hoje", "amanhã", "sexta"). Omitir para o dia atual.',
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'concluir_tarefa',
+      description:
+        'Use quando a pessoa indica que algo foi terminado ("marca como feito", "já entreguei", "concluí o relatório").',
+      parameters: {
+        type: 'object',
+        properties: {
+          titulo_aproximado: {
+            type: 'string',
+            description: 'Trecho ou título aproximado da tarefa concluída, como a pessoa descreveu',
+          },
+        },
+        required: ['titulo_aproximado'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'pedir_esclarecimento',
       description:
         'Use quando a mensagem for ambígua ou incompleta demais para criar uma tarefa (falta responsável, falta o que fazer, etc). A pergunta será enviada de volta pelo WhatsApp.',
@@ -68,6 +104,7 @@ export function criarInterpretador(cfg: Config): Deps['interpretar'] {
             'Extraia também o horário quando mencionado ("às 14h" → 14:00, "meio-dia" → 12:00); sem menção de horário, não preencha o campo horario.',
             `Colaboradores da clínica: ${colaboradores.join(', ')}.`,
             'Se o pedido for claro, chame criar_tarefa. Se faltar informação essencial, chame pedir_esclarecimento.',
+            'Se a pessoa só quer saber o que tem para um dia, chame consultar_agenda. Se ela indica que algo foi concluído, chame concluir_tarefa.',
             'Se a mensagem não tiver relação com tarefas, responda brevemente explicando o que você sabe fazer.',
           ].join('\n'),
         },
@@ -91,6 +128,12 @@ export function criarInterpretador(cfg: Config): Deps['interpretar'] {
       }
       if (call.function.name === 'pedir_esclarecimento') {
         return { tipo: 'pedir_esclarecimento', pergunta: String(args.pergunta ?? 'Pode detalhar?') };
+      }
+      if (call.function.name === 'consultar_agenda') {
+        return { tipo: 'consultar_agenda', data: args.data_referencia ? String(args.data_referencia) : undefined };
+      }
+      if (call.function.name === 'concluir_tarefa') {
+        return { tipo: 'concluir_tarefa', titulo: String(args.titulo_aproximado ?? '') };
       }
     }
 

@@ -16,11 +16,13 @@ WaSenderAPI ──webhook──▶ POST /webhooks/whatsapp
                               │
               conversa pendente? ─▶ trata como resposta à pergunta
                               │
-              OpenAI tool use: criar_tarefa | pedir_esclarecimento
+              OpenAI tool use: criar_tarefa | consultar_agenda | concluir_tarefa | pedir_esclarecimento
                               │
-              resolve responsável (ambíguo? pergunta de volta)
+              resolve responsável/tarefa (ambíguo? pergunta de volta)
                               │
-              papel gestor? ─▶ POST {ONE_APP_URL}/api/public/whatsapp/comandos/criar-tarefa
+              criar_tarefa (gestor) ─▶ POST {ONE_APP_URL}/api/public/whatsapp/comandos/criar-tarefa
+              consultar_agenda ─────▶ GET  {ONE_APP_URL}/api/public/whatsapp/avisos-do-dia?profile_id=&data=
+              concluir_tarefa ──────▶ POST {ONE_APP_URL}/api/public/whatsapp/comandos/concluir-tarefa
                               │
               confirmação ao remetente via WaSenderAPI (dados locais)
 
@@ -106,6 +108,11 @@ Todas as chamadas usam o header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}
 — só retorna perfil de telefone **verificado**; `perfil: null` caso contrário
 — resposta: `{ perfil: { id, clinica_id, nome_completo, papel } | null, colaboradores: [{ id, nome_completo }] }`
   (`colaboradores` = todos da mesma clínica, usados para resolver o responsável)
+
+`POST {ONE_APP_URL}/api/public/whatsapp/comandos/concluir-tarefa`
+— body `{ profile_id, titulo_aproximado }` ou, após desambiguação, `{ profile_id, tarefa_id }`
+— resposta: `{ sucesso: true, titulo }` | `{ ambiguo: true, candidatos: [{ id, titulo }] }` | `{ sucesso: false, erro }`
+  (a agenda de `consultar_agenda` reaproveita o `avisos-do-dia` com `profile_id`/`data`)
 
 ## Contratos expostos para o app ONE
 
