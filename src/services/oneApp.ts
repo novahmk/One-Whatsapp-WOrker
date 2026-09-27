@@ -1,5 +1,6 @@
 import { Config } from '../config';
 import {
+  AgendaResposta,
   AvisoPessoa,
   Colaborador,
   ConcluirTarefaBody,
@@ -56,6 +57,20 @@ export function criarOneApp(cfg: Config): Deps['one'] {
       }
       const corpo = (await r.json()) as { avisos?: AvisoPessoa[] };
       return corpo.avisos ?? [];
+    },
+
+    async buscarAgenda(profileId: string, data?: string): Promise<AgendaResposta> {
+      const query = new URLSearchParams({ profile_id: profileId });
+      if (data) query.set('data', data);
+      const r = await fetch(
+        `${cfg.ONE_APP_URL}/api/public/whatsapp/comandos/agenda?${query}`,
+        { headers },
+      );
+      if (!r.ok) {
+        throw new Error(`ONE agenda falhou: HTTP ${r.status}`);
+      }
+      const corpo = (await r.json()) as { data?: string; itens?: AgendaResposta['itens'] };
+      return { data: corpo.data ?? (data ?? ''), itens: corpo.itens ?? [] };
     },
 
     async buscarPerfil(telefone: string): Promise<PerfilResposta> {

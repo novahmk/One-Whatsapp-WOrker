@@ -21,7 +21,7 @@ WaSenderAPI ──webhook──▶ POST /webhooks/whatsapp
               resolve responsável/tarefa (ambíguo? pergunta de volta)
                               │
               criar_tarefa (gestor) ─▶ POST {ONE_APP_URL}/api/public/whatsapp/comandos/criar-tarefa
-              consultar_agenda ─────▶ GET  {ONE_APP_URL}/api/public/whatsapp/avisos-do-dia?profile_id=&data=
+              consultar_agenda ─────▶ GET  {ONE_APP_URL}/api/public/whatsapp/comandos/agenda?profile_id=&data=
               concluir_tarefa ──────▶ POST {ONE_APP_URL}/api/public/whatsapp/comandos/concluir-tarefa
                               │
               confirmação ao remetente via WaSenderAPI (dados locais)
@@ -96,8 +96,8 @@ Ver [.env.example](.env.example). Obrigatórias (sem `MOCK_EXTERNAL=true`):
 Todas as chamadas usam o header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}`.
 
 `POST {ONE_APP_URL}/api/public/whatsapp/comandos/criar-tarefa`
-— body `{ clinica_id, criado_por_profile_id, responsavel_nome, descricao, prazo, horario }`
-  (`horario` HH:MM ou `null`; o Lovable mapeia para `horario_sugerido`)
+— body `{ clinica_id, criado_por_profile_id, responsavel_nome, titulo, descricao?, prazo, horario }`
+  (`titulo` obrigatório; `descricao` opcional; `horario` HH:MM ou `null`, mapeado para `horario_sugerido`)
 — resposta `{ sucesso: boolean, tarefa_id?: string, responsavel_profile_id?: string, erro?: string }`
 
 `GET {ONE_APP_URL}/api/public/whatsapp/avisos-do-dia[?profile_id=...&data=YYYY-MM-DD]`
@@ -112,7 +112,10 @@ Todas as chamadas usam o header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}
 `POST {ONE_APP_URL}/api/public/whatsapp/comandos/concluir-tarefa`
 — body `{ profile_id, titulo_aproximado }` ou, após desambiguação, `{ profile_id, tarefa_id }`
 — resposta: `{ sucesso: true, titulo }` | `{ ambiguo: true, candidatos: [{ id, titulo }] }` | `{ sucesso: false, erro }`
-  (a agenda de `consultar_agenda` reaproveita o `avisos-do-dia` com `profile_id`/`data`)
+
+`GET {ONE_APP_URL}/api/public/whatsapp/comandos/agenda?profile_id=...&data=YYYY-MM-DD`
+— usado por `consultar_agenda` (data opcional → dia atual)
+— resposta: `{ data, itens: [{ titulo, horario? }] }`
 
 ## Contratos expostos para o app ONE
 

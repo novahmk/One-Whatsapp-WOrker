@@ -22,7 +22,14 @@ export interface MensagemRecebida {
 }
 
 export type Interpretacao =
-  | { tipo: 'criar_tarefa'; responsavel: string; descricao: string; prazo?: string; horario?: string }
+  | {
+      tipo: 'criar_tarefa';
+      responsavel: string;
+      titulo: string;
+      descricao?: string;
+      prazo?: string;
+      horario?: string;
+    }
   | { tipo: 'consultar_agenda'; data?: string }
   | { tipo: 'concluir_tarefa'; titulo: string }
   | { tipo: 'pedir_esclarecimento'; pergunta: string }
@@ -36,7 +43,8 @@ export interface TarefaRef {
 export type ContextoPendente =
   | {
       tipo: 'responsavel';
-      descricao: string;
+      titulo: string;
+      descricao?: string;
       prazo?: string;
       horario?: string;
       candidatos: Colaborador[];
@@ -85,7 +93,8 @@ export interface CriarTarefaBody {
   clinica_id: string;
   criado_por_profile_id: string;
   responsavel_nome: string;
-  descricao: string;
+  titulo: string;
+  descricao?: string;
   prazo?: string;
   horario?: string | null;
 }
@@ -124,6 +133,16 @@ export interface FiltroAvisos {
   data?: string;
 }
 
+export interface AgendaItem {
+  titulo: string;
+  horario?: string | null;
+}
+
+export interface AgendaResposta {
+  data: string;
+  itens: AgendaItem[];
+}
+
 export interface Deps {
   db: {
     buscarConversaPendente(telefone: string): Promise<ConversaPendente | null>;
@@ -144,6 +163,7 @@ export interface Deps {
   one: {
     criarTarefa(body: CriarTarefaBody): Promise<CriarTarefaResposta>;
     concluirTarefa(body: ConcluirTarefaBody): Promise<ConcluirTarefaResposta>;
+    buscarAgenda(profileId: string, data?: string): Promise<AgendaResposta>;
     buscarAvisosDoDia(filtro?: FiltroAvisos): Promise<AvisoPessoa[]>;
     buscarPerfil(telefone: string): Promise<PerfilResposta>;
   };

@@ -1,4 +1,5 @@
 import {
+  AgendaResposta,
   AvisoPessoa,
   Colaborador,
   ConcluirTarefaBody,
@@ -21,6 +22,7 @@ export interface EstadoMock {
   tarefas: CriarTarefaBody[];
   concluidas: ConcluirTarefaBody[];
   avisos: AvisoPessoa[];
+  agenda: AgendaResposta;
 }
 
 export const TELEFONE_GESTORA = '5511999990000';
@@ -76,6 +78,10 @@ function estadoPadrao(): EstadoMock {
         tarefas_atrasadas: ['Atualizar prontuários (26/09)'],
       },
     ],
+    agenda: {
+      data: '',
+      itens: [{ titulo: 'Enviar relatório mensal', horario: null }],
+    },
   };
 }
 
@@ -88,14 +94,14 @@ function interpretarMock(
 
   const nomeCompleto = colaboradores.find((n) => t.includes(normalizar(n)));
   if (nomeCompleto) {
-    return { tipo: 'criar_tarefa', responsavel: nomeCompleto, descricao: texto };
+    return { tipo: 'criar_tarefa', responsavel: nomeCompleto, titulo: texto };
   }
 
   const primeiroNome = colaboradores
     .map((n) => normalizar(n).split(/\s+/)[0])
     .find((p) => new RegExp(`\\b${p}\\b`).test(t));
   if (primeiroNome) {
-    return { tipo: 'criar_tarefa', responsavel: primeiroNome, descricao: texto };
+    return { tipo: 'criar_tarefa', responsavel: primeiroNome, titulo: texto };
   }
 
   return {
@@ -179,6 +185,9 @@ export function criarDepsMock(parcial: Partial<EstadoMock> = {}): {
       async concluirTarefa(body) {
         estado.concluidas.push(body);
         return { sucesso: true, titulo: body.titulo_aproximado ?? body.tarefa_id ?? 'tarefa' };
+      },
+      async buscarAgenda(profileId, data) {
+        return { ...estado.agenda, data: data ?? estado.agenda.data };
       },
       async buscarAvisosDoDia(filtro) {
         if (filtro?.profileId) {

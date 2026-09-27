@@ -126,11 +126,10 @@ async function fluxoConsultarAgenda(
   deps: Deps,
   cfg: Config,
 ): Promise<void> {
-  const data = interpretacao.data ?? dataLocalISO(cfg.TZ_AVISOS);
-  const avisos = await deps.one.buscarAvisosDoDia({ profileId: perfil.id, data });
-  const aviso = avisos.find((a) => a.profile_id === perfil.id);
-  const itens = aviso ? [...aviso.tarefas_hoje, ...aviso.tarefas_atrasadas] : [];
-  await deps.whats.enviarMensagem(base.telefone, montarAgenda(data, itens));
+  const dataRef = interpretacao.data ?? dataLocalISO(cfg.TZ_AVISOS);
+  const agenda = await deps.one.buscarAgenda(perfil.id, dataRef);
+  const itens = agenda.itens.map((i) => (i.horario ? `${i.titulo} às ${i.horario}` : i.titulo));
+  await deps.whats.enviarMensagem(base.telefone, montarAgenda(agenda.data || dataRef, itens));
   await deps.db.registrarLog({ ...base, interpretacao, resultado: 'agenda_consultada' });
 }
 
@@ -195,6 +194,7 @@ async function fluxoCriarTarefa(
       pergunta,
       contexto: {
         tipo: 'responsavel',
+        titulo: interpretacao.titulo,
         descricao: interpretacao.descricao,
         prazo: interpretacao.prazo,
         horario: interpretacao.horario,
@@ -218,6 +218,7 @@ async function fluxoCriarTarefa(
   await criarEConfirmar(
     perfil,
     res.colaborador,
+    interpretacao.titulo,
     interpretacao.descricao,
     interpretacao.prazo,
     interpretacao.horario,
@@ -256,11 +257,19 @@ async function tratarRespostaPendente(
   await criarEConfirmar(
     perfil,
     res.colaborador,
+    contexto.titulo,
     contexto.descricao,
     contexto.prazo,
     contexto.horario,
     base,
-    { tipo: 'criar_tarefa', responsavel: res.colaborador.nome_completo, descricao: contexto.descricao, prazo: contexto.prazo, horario: contexto.horario },
+    {
+      tipo: 'criar_tarefa',
+      responsavel: res.colaborador.nome_completo,
+      titulo: contexto.titulo,
+      descricao: contexto.descricao,
+      prazo: contexto.prazo,
+      horario: contexto.horario,
+    },
     deps,
   );
 }
@@ -310,7 +319,8 @@ async function tratarRespostaConcluir(
 async function criarEConfirmar(
   perfil: Perfil,
   responsavel: Colaborador,
-  descricao: string,
+  titulo: string,
+  descricao: string | undefined,
   prazo: string | undefined,
   horario: string | undefined,
   base: BaseLog,
@@ -330,6 +340,7 @@ async function criarEConfirmar(
     clinica_id: perfil.clinica_id,
     criado_por_profile_id: perfil.id,
     responsavel_nome: responsavel.nome_completo,
+    titulo,
     descricao,
     prazo,
     horario: horario ?? null,
@@ -340,7 +351,7 @@ async function criarEConfirmar(
     const sufixoPrazo = prazo ? ` (prazo: ${prazo}${sufixoHorario})` : sufixoHorario;
     await deps.whats.enviarMensagem(
       base.telefone,
-      `✅ Tarefa criada para ${responsavel.nome_completo}: "${descricao}"${sufixoPrazo}.`,
+      `✅ Tarefa criada para ${responsavel.nome_completo}: "${titulo}"${sufixoPrazo}.`,
     );
     await deps.db.registrarLog({
       ...base,

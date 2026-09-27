@@ -11,7 +11,7 @@ describe('processarMensagem', () => {
     deps.interpretar = async () => ({
       tipo: 'criar_tarefa',
       responsavel: 'Carla Lima',
-      descricao: 'organizar os prontuários',
+      titulo: 'organizar os prontuários',
       prazo: '2026-10-02',
       horario: '14:00',
     });
@@ -27,6 +27,7 @@ describe('processarMensagem', () => {
       clinica_id: 'clinica-1',
       criado_por_profile_id: 'perfil-ana',
       responsavel_nome: 'Carla Lima',
+      titulo: 'organizar os prontuários',
       prazo: '2026-10-02',
       horario: '14:00',
     });
@@ -42,7 +43,7 @@ describe('processarMensagem', () => {
     deps.interpretar = async () => ({
       tipo: 'criar_tarefa',
       responsavel: 'Carla Lima',
-      descricao: 'organizar os prontuários',
+      titulo: 'organizar os prontuários',
     });
 
     await processarMensagem(
@@ -202,15 +203,13 @@ describe('processarMensagem', () => {
   it('consultar_agenda responde a lista do dia sem criar nada', async () => {
     const { deps, estado } = criarDepsMock();
     deps.interpretar = async () => ({ tipo: 'consultar_agenda', data: '2026-09-28' });
-    deps.one.buscarAvisosDoDia = async () => [
-      {
-        profile_id: 'perfil-ana',
-        telefone: TELEFONE_GESTORA,
-        nome: 'Ana Souza',
-        tarefas_hoje: ['Reunião com Bruno às 14h'],
-        tarefas_atrasadas: ['Follow-up cliente X'],
-      },
-    ];
+    deps.one.buscarAgenda = async (_profileId, data) => ({
+      data: data ?? '2026-09-28',
+      itens: [
+        { titulo: 'Reunião com Bruno', horario: '14:00' },
+        { titulo: 'Follow-up cliente X' },
+      ],
+    });
 
     await processarMensagem(
       { messageId: 'm1', telefone: TELEFONE_GESTORA, texto: 'o que tenho amanhã?' },
@@ -220,7 +219,7 @@ describe('processarMensagem', () => {
 
     expect(estado.tarefas).toHaveLength(0);
     expect(estado.enviadas.at(-1)?.texto).toBe(
-      'Pra 2026-09-28 você tem: Reunião com Bruno às 14h, Follow-up cliente X.',
+      'Pra 2026-09-28 você tem: Reunião com Bruno às 14:00, Follow-up cliente X.',
     );
     expect(estado.logs.at(-1)?.resultado).toBe('agenda_consultada');
   });

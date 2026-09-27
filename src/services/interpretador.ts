@@ -17,7 +17,11 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             description:
               'Nome da pessoa responsável, exatamente como citado ou o nome completo se identificável na lista de colaboradores',
           },
-          descricao: { type: 'string', description: 'Descrição objetiva da tarefa' },
+          titulo: { type: 'string', description: 'Título curto e objetivo da tarefa' },
+          descricao: {
+            type: 'string',
+            description: 'Detalhes adicionais da tarefa, quando houver. Omitir se não houver.',
+          },
           prazo: {
             type: 'string',
             description:
@@ -29,7 +33,7 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
               'Horário no formato HH:MM quando mencionado (ex: "às 14h" → "14:00", "meio-dia" → "12:00"). Omitir quando a mensagem não menciona horário.',
           },
         },
-        required: ['responsavel', 'descricao'],
+        required: ['responsavel', 'titulo'],
       },
     },
   },
@@ -105,6 +109,7 @@ export function criarInterpretador(cfg: Config): Deps['interpretar'] {
             `Colaboradores da clínica: ${colaboradores.join(', ')}.`,
             'Se o pedido for claro, chame criar_tarefa. Se faltar informação essencial, chame pedir_esclarecimento.',
             'Se a pessoa só quer saber o que tem para um dia, chame consultar_agenda. Se ela indica que algo foi concluído, chame concluir_tarefa.',
+            'Respostas devem ser objetivas e curtas — o sistema executa a ação, não conversa como humano.',
             'Se a mensagem não tiver relação com tarefas, responda brevemente explicando o que você sabe fazer.',
           ].join('\n'),
         },
@@ -121,7 +126,8 @@ export function criarInterpretador(cfg: Config): Deps['interpretar'] {
         return {
           tipo: 'criar_tarefa',
           responsavel: String(args.responsavel ?? ''),
-          descricao: String(args.descricao ?? ''),
+          titulo: String(args.titulo ?? args.descricao ?? ''),
+          descricao: args.descricao ? String(args.descricao) : undefined,
           prazo: args.prazo ? String(args.prazo) : undefined,
           horario: args.horario ? String(args.horario) : undefined,
         };
