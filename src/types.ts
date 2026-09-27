@@ -11,6 +11,7 @@ export interface Perfil extends Colaborador {
 export interface PerfilResposta {
   perfil: Perfil | null;
   colaboradores: Colaborador[];
+  erro?: string;
 }
 
 export interface MensagemRecebida {
@@ -71,6 +72,7 @@ export type ResultadoLog =
   | 'esclarecimento_repetido'
   | 'nao_autorizado'
   | 'nao_reconhecido'
+  | 'erro_perfil'
   | 'responsavel_nao_encontrado'
   | 'sem_acao'
   | 'aviso_enviado'

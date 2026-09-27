@@ -75,14 +75,28 @@ export function criarOneApp(cfg: Config): Deps['one'] {
 
     async buscarPerfil(telefone: string): Promise<PerfilResposta> {
       const url = `${cfg.ONE_APP_URL}/api/public/whatsapp/perfil?telefone=${encodeURIComponent(telefone)}`;
-      const r = await fetch(url, { headers });
-      if (!r.ok) {
-        throw new Error(`ONE perfil falhou: HTTP ${r.status}`);
+      let r: Response;
+      try {
+        r = await fetch(url, { headers });
+      } catch (e) {
+        console.error('ONE perfil: falha de rede', e);
+        return { perfil: null, colaboradores: [], erro: 'rede' };
       }
-      const corpo = (await r.json()) as {
-        perfil?: Perfil | null;
-        colaboradores?: Colaborador[];
-      };
+      // 404 = telefone não cadastrado; tratamos como "não reconhecido", não como erro.
+      if (r.status === 404) {
+        return { perfil: null, colaboradores: [] };
+      }
+      if (!r.ok) {
+        console.error(`ONE perfil falhou: HTTP ${r.status}`);
+        return { perfil: null, colaboradores: [], erro: `HTTP ${r.status}` };
+      }
+      let corpo: { perfil?: Perfil | null; colaboradores?: Colaborador[] };
+      try {
+        corpo = (await r.json()) as typeof corpo;
+      } catch (e) {
+        console.error('ONE perfil: resposta não-JSON', e);
+        return { perfil: null, colaboradores: [], erro: 'json' };
+      }
       return { perfil: corpo.perfil ?? null, colaboradores: corpo.colaboradores ?? [] };
     },
   };

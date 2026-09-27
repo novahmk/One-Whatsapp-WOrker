@@ -131,6 +131,22 @@ describe('processarMensagem', () => {
     expect(estado.logs.at(-1)?.resultado).toBe('nao_reconhecido');
   });
 
+  it('erro no /perfil responde ao usuário e loga erro_perfil, sem ficar mudo', async () => {
+    const { deps, estado } = criarDepsMock();
+    deps.one.buscarPerfil = async () => ({ perfil: null, colaboradores: [], erro: 'HTTP 500' });
+
+    await processarMensagem(
+      { messageId: 'm1', telefone: TELEFONE_GESTORA, texto: 'cria tarefa pra Carla' },
+      deps,
+      cfg,
+    );
+
+    expect(estado.tarefas).toHaveLength(0);
+    expect(estado.enviadas).toHaveLength(1);
+    expect(estado.enviadas[0].texto).toContain('problema pra te identificar no ONE');
+    expect(estado.logs.at(-1)?.resultado).toBe('erro_perfil');
+  });
+
   it('deduplica mensagens com o mesmo message_id', async () => {
     const { deps, estado } = criarDepsMock();
     const msg = { messageId: 'm1', telefone: TELEFONE_GESTORA, texto: 'cria tarefa pra Carla Lima arquivar exames' };

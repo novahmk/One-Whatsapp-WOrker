@@ -24,7 +24,21 @@ export async function processarMensagem(
 
   const tipo = msg.audioUrl ? 'audio' : 'texto';
 
-  const { perfil, colaboradores } = await deps.one.buscarPerfil(msg.telefone);
+  const { perfil, colaboradores, erro } = await deps.one.buscarPerfil(msg.telefone);
+  if (erro) {
+    await deps.whats.enviarMensagem(
+      msg.telefone,
+      'Tive um problema pra te identificar no ONE agora. Tenta de novo daqui a pouco.',
+    );
+    await deps.db.registrarLog({
+      message_id: msg.messageId,
+      telefone: msg.telefone,
+      tipo,
+      texto_original: msg.texto,
+      resultado: 'erro_perfil',
+    });
+    return;
+  }
   if (!perfil) {
     await deps.whats.enviarMensagem(
       msg.telefone,
