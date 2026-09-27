@@ -1,0 +1,190 @@
+import {
+  AvisoPessoa,
+  Clinica,
+  ConversaPendente,
+  CriarTarefaBody,
+  Deps,
+  Interpretacao,
+  LogEntrada,
+  Perfil,
+} from '../types';
+import { normalizar } from '../core/resolverResponsavel';
+
+export interface EstadoMock {
+  perfis: Perfil[];
+  clinicas: Clinica[];
+  conversas: ConversaPendente[];
+  logs: (LogEntrada & { created_at: string })[];
+  enviadas: { telefone: string; texto: string }[];
+  tarefas: CriarTarefaBody[];
+  avisos: AvisoPessoa[];
+}
+
+export const TELEFONE_GESTORA = '5511999990000';
+export const TELEFONE_COLABORADORA = '5511999990003';
+
+function estadoPadrao(): EstadoMock {
+  return {
+    perfis: [
+      {
+        id: 'perfil-ana',
+        clinica_id: 'clinica-1',
+        nome_completo: 'Ana Souza',
+        telefone_whatsapp: TELEFONE_GESTORA,
+        whatsapp_verificado: true,
+        papel: 'gestor',
+      },
+      {
+        id: 'perfil-vitor-a',
+        clinica_id: 'clinica-1',
+        nome_completo: 'Vitor Almeida',
+        telefone_whatsapp: '5511999990001',
+        whatsapp_verificado: true,
+        papel: 'colaborador',
+      },
+      {
+        id: 'perfil-vitor-s',
+        clinica_id: 'clinica-1',
+        nome_completo: 'Vitor Santos',
+        telefone_whatsapp: '5511999990002',
+        whatsapp_verificado: true,
+        papel: 'colaborador',
+      },
+      {
+        id: 'perfil-carla',
+        clinica_id: 'clinica-1',
+        nome_completo: 'Carla Lima',
+        telefone_whatsapp: TELEFONE_COLABORADORA,
+        whatsapp_verificado: true,
+        papel: 'colaborador',
+      },
+    ],
+    clinicas: [{ id: 'clinica-1', nome: 'Clínica Mock', horario_aviso_whatsapp: '08:00' }],
+    conversas: [],
+    logs: [],
+    enviadas: [],
+    tarefas: [],
+    avisos: [
+      {
+        telefone: TELEFONE_COLABORADORA,
+        nome: 'Carla Lima',
+        tarefas: [{ descricao: 'Enviar relatório mensal', prazo: '2026-09-26' }],
+      },
+    ],
+  };
+}
+
+// Interpretador determinístico: acha um colaborador citado no texto (nome completo ou primeiro nome).
+function interpretarMock(
+  texto: string,
+  colaboradores: string[],
+): Interpretacao {
+  const t = normalizar(texto);
+
+  const nomeCompleto = colaboradores.find((n) => t.includes(normalizar(n)));
+  if (nomeCompleto) {
+    return { tipo: 'criar_tarefa', responsavel: nomeCompleto, descricao: texto };
+  }
+
+  const primeiroNome = colaboradores
+    .map((n) => normalizar(n).split(/\s+/)[0])
+    .find((p) => new RegExp(`\\b${p}\\b`).test(t));
+  if (primeiroNome) {
+    return { tipo: 'criar_tarefa', responsavel: primeiroNome, descricao: texto };
+  }
+
+  return {
+    tipo: 'pedir_esclarecimento',
+    pergunta: 'Não entendi. Para quem é a tarefa e o que deve ser feito?',
+  };
+}
+
+export function criarDepsMock(parcial: Partial<EstadoMock> = {}): {
+  deps: Deps;
+  estado: EstadoMock;
+} {
+  const estado: EstadoMock = { ...estadoPadrao(), ...parcial };
+  let seq = 0;
+
+  const deps: Deps = {
+    db: {
+      async buscarPerfilPorTelefone(telefone) {
+        return (
+          estado.perfis.find(
+            (p) => p.telefone_whatsapp === telefone && p.whatsapp_verificado,
+          ) ?? null
+        );
+      },
+      async listarColaboradores(clinicaId) {
+        return estado.perfis
+          .filter((p) => p.clinica_id === clinicaId)
+          .map(({ id, nome_completo }) => ({ id, nome_completo }));
+      },
+      async buscarConversaPendente(telefone) {
+        return (
+          [...estado.conversas]
+            .reverse()
+            .find((c) => c.telefone === telefone && c.status === 'aguardando_resposta') ?? null
+        );
+      },
+      async criarConversaPendente(conversa) {
+        estado.conversas.push({
+          ...conversa,
+          id: `conv-${++seq}`,
+          status: 'aguardando_resposta',
+          created_at: new Date().toISOString(),
+        });
+      },
+      async resolverConversa(id) {
+        const c = estado.conversas.find((x) => x.id === id);
+        if (c) c.status = 'resolvida';
+      },
+      async registrarLog(entrada) {
+        estado.logs.push({ ...entrada, created_at: new Date().toISOString() });
+        console.log('[MOCK log]', entrada.resultado, entrada.telefone);
+      },
+      async mensagemJaProcessada(messageId) {
+        return estado.logs.some((l) => l.message_id === messageId);
+      },
+      async avisoJaEnviadoHoje(clinicaId, telefone) {
+        const hoje = new Date().toISOString().slice(0, 10);
+        return estado.logs.some(
+          (l) =>
+            l.tipo === 'aviso_diario' &&
+            l.clinica_id === clinicaId &&
+            l.telefone === telefone &&
+            l.created_at.startsWith(hoje),
+        );
+      },
+      async listarClinicasComAviso() {
+        return estado.clinicas;
+      },
+    },
+    whats: {
+      async enviarMensagem(telefone, texto) {
+        estado.enviadas.push({ telefone, texto });
+        console.log(`[MOCK wasender] → ${telefone}: ${texto}`);
+      },
+      async baixarMidia() {
+        return Buffer.from('audio-fake');
+      },
+    },
+    async transcrever() {
+      return 'Criar uma tarefa para a Carla Lima organizar os prontuários até sexta-feira';
+    },
+    async interpretar(texto, colaboradores) {
+      return interpretarMock(texto, colaboradores);
+    },
+    one: {
+      async criarTarefa(body) {
+        estado.tarefas.push(body);
+        return { sucesso: true, tarefa_id: `mock-tarefa-${estado.tarefas.length}` };
+      },
+      async buscarAvisosDoDia() {
+        return estado.avisos;
+      },
+    },
+  };
+
+  return { deps, estado };
+}

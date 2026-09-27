@@ -1,0 +1,16 @@
+{
+  "event": "messages.upsert",
+  "data": {
+    "messages": {
+      "key": {
+        "id": "SIM-AMBIGUO-001",
+        "remoteJid": "5511999990000@s.whatsapp.net",
+        "fromMe": false
+      },
+      "messageTimestamp": 1758950200,
+      "message": {
+        "conversation": "Pede pro Vitor revisar a agenda de amanhã"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "event": "messages.upsert",
+  "data": {
+    "messages": {
+      "key": {
+        "id": "SIM-TEXTO-001",
+        "remoteJid": "5511999990000@s.whatsapp.net",
+        "fromMe": false
+      },
+      "messageTimestamp": 1758950000,
+      "message": {
+        "conversation": "Cria uma tarefa para a Carla Lima organizar os prontuários até sexta"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "event": "messages.upsert",
+  "data": {
+    "messages": {
+      "key": {
+        "id": "SIM-RESPOSTA-001",
+        "remoteJid": "5511999990000@s.whatsapp.net",
+        "fromMe": false
+      },
+      "messageTimestamp": 1758950300,
+      "message": {
+        "conversation": "Vitor Almeida"
+      }
+    }
+  }
+}
