@@ -1,10 +1,10 @@
 import { Config } from '../config';
-import { AvisoPessoa, CriarTarefaBody, CriarTarefaResposta, Deps } from '../types';
+import { AvisoPessoa, CriarTarefaBody, CriarTarefaResposta, Deps, FiltroAvisos } from '../types';
 
 export function criarOneApp(cfg: Config): Deps['one'] {
   const headers = {
     'Content-Type': 'application/json',
-    'x-whatsapp-service-secret': cfg.WHATSAPP_SERVICE_SECRET,
+    Authorization: `Bearer ${cfg.WHATSAPP_SERVICE_SECRET}`,
   };
 
   return {
@@ -20,9 +20,14 @@ export function criarOneApp(cfg: Config): Deps['one'] {
       return (await r.json()) as CriarTarefaResposta;
     },
 
-    async buscarAvisosDoDia(clinicaId: string): Promise<AvisoPessoa[]> {
-      const url = `${cfg.ONE_APP_URL}/api/public/whatsapp/avisos-do-dia?clinica_id=${encodeURIComponent(clinicaId)}`;
-      const r = await fetch(url, { headers });
+    async buscarAvisosDoDia(filtro?: FiltroAvisos): Promise<AvisoPessoa[]> {
+      const query = new URLSearchParams();
+      if (filtro?.profileId) query.set('profile_id', filtro.profileId);
+      if (filtro?.data) query.set('data', filtro.data);
+      const sufixo = query.size > 0 ? `?${query}` : '';
+      const r = await fetch(`${cfg.ONE_APP_URL}/api/public/whatsapp/avisos-do-dia${sufixo}`, {
+        headers,
+      });
       if (!r.ok) {
         throw new Error(`ONE avisos-do-dia falhou: HTTP ${r.status}`);
       }

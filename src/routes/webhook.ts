@@ -1,15 +1,10 @@
-import { timingSafeEqual } from 'node:crypto';
 import { FastifyInstance } from 'fastify';
 import { Config } from '../config';
 import { Deps, MensagemRecebida } from '../types';
 import { processarMensagem } from '../core/processarMensagem';
+import { segredoValido } from '../util/auth';
 
-export function segredoValido(recebido: unknown, esperado: string): boolean {
-  if (typeof recebido !== 'string' || recebido.length === 0) return false;
-  const a = Buffer.from(recebido);
-  const b = Buffer.from(esperado);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
+export { segredoValido };
 
 // Normaliza o payload estilo Baileys do WaSenderAPI para o formato interno.
 export function extrairMensagem(payload: unknown): MensagemRecebida | null {

@@ -10,6 +10,7 @@ import {
 } from '../types';
 import { dataLocalISO } from '../util/tempo';
 import { resolverResponsavel } from './resolverResponsavel';
+import { notificarAgenda } from './notificarAgenda';
 
 type BaseLog = Omit<LogEntrada, 'resultado' | 'tarefa_id' | 'interpretacao'>;
 
@@ -25,12 +26,16 @@ export async function processarMensagem(
 
   const perfil = await deps.db.buscarPerfilPorTelefone(msg.telefone);
   if (!perfil) {
+    await deps.whats.enviarMensagem(
+      msg.telefone,
+      'Esse número ainda não está configurado no ONE. Peça pro seu gestor liberar seu acesso pelo painel.',
+    );
     await deps.db.registrarLog({
       message_id: msg.messageId,
       telefone: msg.telefone,
       tipo,
       texto_original: msg.texto,
-      resultado: 'nao_verificado',
+      resultado: 'nao_reconhecido',
     });
     return;
   }
@@ -218,6 +223,13 @@ async function criarEConfirmar(
       resultado: 'tarefa_criada',
       tarefa_id: resultado.tarefa_id,
     });
+    if (resultado.responsavel_profile_id) {
+      try {
+        await notificarAgenda(deps, resultado.responsavel_profile_id, prazo, { dedupe: false });
+      } catch (e) {
+        console.error('Falha ao notificar agenda do responsável:', e);
+      }
+    }
   } else {
     await deps.whats.enviarMensagem(
       base.telefone,

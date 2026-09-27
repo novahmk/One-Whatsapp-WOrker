@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { Config } from '../config';
-import { Clinica, Colaborador, ConversaPendente, Deps, LogEntrada, Perfil } from '../types';
+import { Colaborador, ConversaPendente, Deps, LogEntrada, Perfil } from '../types';
 import { inicioDoDiaISO } from '../util/tempo';
 
 export function criarDb(cfg: Config): Deps['db'] {
@@ -73,28 +73,16 @@ export function criarDb(cfg: Config): Deps['db'] {
       return (data ?? []).length > 0;
     },
 
-    async avisoJaEnviadoHoje(clinicaId: string, telefone: string): Promise<boolean> {
+    async avisoJaEnviadoHoje(telefone: string): Promise<boolean> {
       const { data, error } = await sb
         .from('whatsapp_mensagens_log')
         .select('id')
         .eq('tipo', 'aviso_diario')
-        .eq('clinica_id', clinicaId)
         .eq('telefone', telefone)
         .gte('created_at', inicioDoDiaISO(cfg.TZ_AVISOS))
         .limit(1);
       if (error) throw error;
       return (data ?? []).length > 0;
-    },
-
-    async listarClinicasComAviso(): Promise<Clinica[]> {
-      const { data, error } = await sb
-        .from('clinicas')
-        .select('id, nome, horario_aviso_whatsapp');
-      if (error) {
-        console.warn('Falha ao listar clínicas para avisos:', error.message);
-        return [];
-      }
-      return (data ?? []) as Clinica[];
     },
   };
 }

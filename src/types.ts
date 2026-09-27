@@ -45,7 +45,7 @@ export type ResultadoLog =
   | 'esclarecimento_solicitado'
   | 'esclarecimento_repetido'
   | 'nao_autorizado'
-  | 'nao_verificado'
+  | 'nao_reconhecido'
   | 'responsavel_nao_encontrado'
   | 'sem_acao'
   | 'aviso_enviado'
@@ -75,19 +75,21 @@ export interface CriarTarefaBody {
 export interface CriarTarefaResposta {
   sucesso: boolean;
   tarefa_id?: string;
+  responsavel_profile_id?: string;
   erro?: string;
 }
 
 export interface AvisoPessoa {
+  profile_id: string;
   telefone: string;
   nome: string;
-  tarefas: { descricao: string; prazo?: string }[];
+  tarefas_hoje: string[];
+  tarefas_atrasadas: string[];
 }
 
-export interface Clinica {
-  id: string;
-  nome: string;
-  horario_aviso_whatsapp?: string | null;
+export interface FiltroAvisos {
+  profileId?: string;
+  data?: string;
 }
 
 export interface Deps {
@@ -101,8 +103,7 @@ export interface Deps {
     resolverConversa(id: string): Promise<void>;
     registrarLog(entrada: LogEntrada): Promise<void>;
     mensagemJaProcessada(messageId: string): Promise<boolean>;
-    avisoJaEnviadoHoje(clinicaId: string, telefone: string): Promise<boolean>;
-    listarClinicasComAviso(): Promise<Clinica[]>;
+    avisoJaEnviadoHoje(telefone: string): Promise<boolean>;
   };
   whats: {
     enviarMensagem(telefone: string, texto: string): Promise<void>;
@@ -112,6 +113,6 @@ export interface Deps {
   interpretar(texto: string, colaboradores: string[], dataAtual: string): Promise<Interpretacao>;
   one: {
     criarTarefa(body: CriarTarefaBody): Promise<CriarTarefaResposta>;
-    buscarAvisosDoDia(clinicaId: string): Promise<AvisoPessoa[]>;
+    buscarAvisosDoDia(filtro?: FiltroAvisos): Promise<AvisoPessoa[]>;
   };
 }

@@ -24,9 +24,10 @@ WaSenderAPI ──webhook──▶ POST /webhooks/whatsapp
                               │
               confirmação via WaSenderAPI + log em whatsapp_mensagens_log
 
-node-cron (a cada 15 min) ─▶ clínicas na janela de horário
-                          ─▶ GET {ONE_APP_URL}/api/public/whatsapp/avisos-do-dia
+node-cron (a cada 15 min) ─▶ GET {ONE_APP_URL}/api/public/whatsapp/avisos-do-dia
                           ─▶ envia resumos com delay anti-rajada (1,5–2s)
+
+One App ──POST /verificacao──▶ envia código de verificação via WhatsApp
 ```
 
 ## Rodando
@@ -69,13 +70,20 @@ obrigatórias e o processo falha no boot se faltar alguma.
   `whatsapp_mensagens_log` antes de processar — reinícios/deploys não causam
   reprocessamento nem respostas duplicadas.
 - **Aviso diário idempotente**: antes de enviar, consulta o log
-  (`tipo = 'aviso_diario'`, mesma clínica/telefone/dia). Deploy no meio do dia
-  não reenvia avisos.
+  (`tipo = 'aviso_diario'`, mesmo telefone/dia). Deploy no meio do dia
+  não reenvia avisos. O One App decide quem deve ser avisado a cada consulta;
+  o worker apenas faz polling a cada 15 min.
 - **Delay anti-banimento**: 1,5–2s (com jitter) entre envios no job diário.
 - **Webhook sempre responde 200** (exceto assinatura inválida → 401) para o
   WaSenderAPI não reenviar o payload.
 - **Autorização**: só perfis com `papel = 'gestor'` criam tarefas; outros
   recebem recusa e o evento é logado como `nao_autorizado`.
+- **Telefone não reconhecido**: sem chamar a Anthropic, o remetente recebe
+  orientação para pedir liberação ao gestor e o evento é logado como
+  `nao_reconhecido`.
+- **Agenda pós-criação**: quando o ONE confirma a tarefa (com
+  `responsavel_profile_id`), o responsável recebe na hora a agenda da data do
+  prazo (`notificarAgenda`), sem dedupe diário.
 - **Pendências expiram em 24h** (ignoradas na busca).
 
 ## Schema esperado no Supabase (já criado pelo app ONE)
@@ -117,30 +125,33 @@ whatsapp_mensagens_log (
   tarefa_id text,
   created_at timestamptz default now()
 )
-
-clinicas (
-  id uuid pk,
-  nome text,
-  horario_aviso_whatsapp text       -- 'HH:MM'; ausente → AVISO_HORARIO_PADRAO
-)
 ```
 
 ## Contratos consumidos do app ONE
 
-`POST {ONE_APP_URL}/api/public/whatsapp/comandos/criar-tarefa`
-— header `x-whatsapp-service-secret: {WHATSAPP_SERVICE_SECRET}`
-— body `{ clinica_id, criado_por_profile_id, responsavel_nome, descricao, prazo }`
-— resposta `{ sucesso: boolean, tarefa_id?: string, erro?: string }`
+Todas as chamadas usam o header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}`.
 
-`GET {ONE_APP_URL}/api/public/whatsapp/avisos-do-dia?clinica_id=...`
-— mesmo header
-— resposta assumida: `{ avisos: [{ telefone, nome, tarefas: [{ descricao, prazo? }] }] }`
-  *(formato a confirmar com o app ONE antes de sair do mock)*
+`POST {ONE_APP_URL}/api/public/whatsapp/comandos/criar-tarefa`
+— body `{ clinica_id, criado_por_profile_id, responsavel_nome, descricao, prazo }`
+— resposta `{ sucesso: boolean, tarefa_id?: string, responsavel_profile_id?: string, erro?: string }`
+
+`GET {ONE_APP_URL}/api/public/whatsapp/avisos-do-dia[?profile_id=...&data=YYYY-MM-DD]`
+— sem filtros: todos que devem ser avisados hoje; com filtros: agenda de uma pessoa/data
+— resposta: `{ dia, avisos: [{ profile_id, telefone, nome, tarefas_hoje: string[], tarefas_atrasadas: string[] }] }`
+
+## Contratos expostos para o app ONE
+
+`POST /verificacao`
+— header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}`
+— body `{ telefone: "5511999999999", nome: "Carlos Silva", codigo: "123456" }`
+— envia o código por WhatsApp e responde `{ sucesso: true }`;
+  401 sem/segredo errado, 400 body inválido, 500 `{ erro }` se o envio falhar
 
 ## Checklist antes de sair do modo mock
 
 1. [ ] Prompts do Lovable executados no ONE (tabelas WhatsApp + endpoints `/api/public/whatsapp/*`)
-2. [ ] Tabelas `whatsapp_conversas`, `whatsapp_mensagens_log` e colunas de `profiles`/`clinicas` conferidas no Supabase
-3. [ ] Smoke test do `criar-tarefa` e do `avisos-do-dia` com o `WHATSAPP_SERVICE_SECRET` real
+2. [ ] Tabelas `whatsapp_conversas`, `whatsapp_mensagens_log` e colunas de `profiles` conferidas no Supabase
+3. [ ] Smoke test do `criar-tarefa`, do `avisos-do-dia` e do `/verificacao` com o `WHATSAPP_SERVICE_SECRET` real
 4. [ ] Formato real do payload de webhook do WaSenderAPI conferido contra `extrairMensagem` (src/routes/webhook.ts)
 5. [ ] Webhook cadastrado no painel do WaSenderAPI apontando para `https://<host>/webhooks/whatsapp`
+6. [ ] URL do worker (`https://<host>/verificacao`) configurada no One App

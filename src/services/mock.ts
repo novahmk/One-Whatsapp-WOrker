@@ -1,6 +1,5 @@
 import {
   AvisoPessoa,
-  Clinica,
   ConversaPendente,
   CriarTarefaBody,
   Deps,
@@ -12,7 +11,6 @@ import { normalizar } from '../core/resolverResponsavel';
 
 export interface EstadoMock {
   perfis: Perfil[];
-  clinicas: Clinica[];
   conversas: ConversaPendente[];
   logs: (LogEntrada & { created_at: string })[];
   enviadas: { telefone: string; texto: string }[];
@@ -59,16 +57,17 @@ function estadoPadrao(): EstadoMock {
         papel: 'colaborador',
       },
     ],
-    clinicas: [{ id: 'clinica-1', nome: 'Clínica Mock', horario_aviso_whatsapp: '08:00' }],
     conversas: [],
     logs: [],
     enviadas: [],
     tarefas: [],
     avisos: [
       {
+        profile_id: 'perfil-carla',
         telefone: TELEFONE_COLABORADORA,
         nome: 'Carla Lima',
-        tarefas: [{ descricao: 'Enviar relatório mensal', prazo: '2026-09-26' }],
+        tarefas_hoje: ['Enviar relatório mensal'],
+        tarefas_atrasadas: ['Atualizar prontuários (26/09)'],
       },
     ],
   };
@@ -146,18 +145,14 @@ export function criarDepsMock(parcial: Partial<EstadoMock> = {}): {
       async mensagemJaProcessada(messageId) {
         return estado.logs.some((l) => l.message_id === messageId);
       },
-      async avisoJaEnviadoHoje(clinicaId, telefone) {
+      async avisoJaEnviadoHoje(telefone) {
         const hoje = new Date().toISOString().slice(0, 10);
         return estado.logs.some(
           (l) =>
             l.tipo === 'aviso_diario' &&
-            l.clinica_id === clinicaId &&
             l.telefone === telefone &&
             l.created_at.startsWith(hoje),
         );
-      },
-      async listarClinicasComAviso() {
-        return estado.clinicas;
       },
     },
     whats: {
@@ -178,9 +173,19 @@ export function criarDepsMock(parcial: Partial<EstadoMock> = {}): {
     one: {
       async criarTarefa(body) {
         estado.tarefas.push(body);
-        return { sucesso: true, tarefa_id: `mock-tarefa-${estado.tarefas.length}` };
+        const responsavel = estado.perfis.find(
+          (p) => p.nome_completo === body.responsavel_nome,
+        );
+        return {
+          sucesso: true,
+          tarefa_id: `mock-tarefa-${estado.tarefas.length}`,
+          responsavel_profile_id: responsavel?.id,
+        };
       },
-      async buscarAvisosDoDia() {
+      async buscarAvisosDoDia(filtro) {
+        if (filtro?.profileId) {
+          return estado.avisos.filter((a) => a.profile_id === filtro.profileId);
+        }
         return estado.avisos;
       },
     },
