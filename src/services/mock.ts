@@ -1,5 +1,6 @@
 import {
   AvisoPessoa,
+  Colaborador,
   ConversaPendente,
   CriarTarefaBody,
   Deps,
@@ -9,8 +10,10 @@ import {
 } from '../types';
 import { normalizar } from '../core/resolverResponsavel';
 
+type PerfilMock = Perfil & { telefone_whatsapp: string; whatsapp_verificado: boolean };
+
 export interface EstadoMock {
-  perfis: Perfil[];
+  perfis: PerfilMock[];
   conversas: ConversaPendente[];
   logs: (LogEntrada & { created_at: string })[];
   enviadas: { telefone: string; texto: string }[];
@@ -107,18 +110,6 @@ export function criarDepsMock(parcial: Partial<EstadoMock> = {}): {
 
   const deps: Deps = {
     db: {
-      async buscarPerfilPorTelefone(telefone) {
-        return (
-          estado.perfis.find(
-            (p) => p.telefone_whatsapp === telefone && p.whatsapp_verificado,
-          ) ?? null
-        );
-      },
-      async listarColaboradores(clinicaId) {
-        return estado.perfis
-          .filter((p) => p.clinica_id === clinicaId)
-          .map(({ id, nome_completo }) => ({ id, nome_completo }));
-      },
       async buscarConversaPendente(telefone) {
         return (
           [...estado.conversas]
@@ -187,6 +178,18 @@ export function criarDepsMock(parcial: Partial<EstadoMock> = {}): {
           return estado.avisos.filter((a) => a.profile_id === filtro.profileId);
         }
         return estado.avisos;
+      },
+      async buscarPerfil(telefone) {
+        const encontrado =
+          estado.perfis.find(
+            (p) => p.telefone_whatsapp === telefone && p.whatsapp_verificado,
+          ) ?? null;
+        if (!encontrado) return { perfil: null, colaboradores: [] };
+        const { telefone_whatsapp, whatsapp_verificado, ...perfil } = encontrado;
+        const colaboradores: Colaborador[] = estado.perfis
+          .filter((p) => p.clinica_id === perfil.clinica_id)
+          .map(({ id, nome_completo }) => ({ id, nome_completo }));
+        return { perfil, colaboradores };
       },
     },
   };

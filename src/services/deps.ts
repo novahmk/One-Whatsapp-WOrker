@@ -1,9 +1,9 @@
 import { Config } from '../config';
 import { Deps } from '../types';
-import { criarDb } from './supabase';
+import { criarEstadoMemoria } from './memoria';
 import { criarWasender } from './wasender';
 import { criarTranscritor } from './whisper';
-import { criarInterpretador } from './anthropic';
+import { criarInterpretador } from './interpretador';
 import { criarOneApp } from './oneApp';
 import { criarDepsMock } from './mock';
 
@@ -14,7 +14,7 @@ export function criarDeps(cfg: Config): Deps {
   }
 
   return {
-    db: criarDb(cfg),
+    db: criarEstadoMemoria(cfg.TZ_AVISOS),
     whats: criarWasender(cfg),
     transcrever: criarTranscritor(cfg),
     interpretar: criarInterpretador(cfg),

@@ -5,9 +5,12 @@ export interface Colaborador {
 
 export interface Perfil extends Colaborador {
   clinica_id: string;
-  telefone_whatsapp: string;
-  whatsapp_verificado: boolean;
   papel: string;
+}
+
+export interface PerfilResposta {
+  perfil: Perfil | null;
+  colaboradores: Colaborador[];
 }
 
 export interface MensagemRecebida {
@@ -94,8 +97,6 @@ export interface FiltroAvisos {
 
 export interface Deps {
   db: {
-    buscarPerfilPorTelefone(telefone: string): Promise<Perfil | null>;
-    listarColaboradores(clinicaId: string): Promise<Colaborador[]>;
     buscarConversaPendente(telefone: string): Promise<ConversaPendente | null>;
     criarConversaPendente(
       conversa: Omit<ConversaPendente, 'id' | 'status' | 'created_at'>,
@@ -114,5 +115,6 @@ export interface Deps {
   one: {
     criarTarefa(body: CriarTarefaBody): Promise<CriarTarefaResposta>;
     buscarAvisosDoDia(filtro?: FiltroAvisos): Promise<AvisoPessoa[]>;
+    buscarPerfil(telefone: string): Promise<PerfilResposta>;
   };
 }

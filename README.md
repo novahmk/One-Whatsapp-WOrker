@@ -1,28 +1,28 @@
 # ONE WhatsApp Worker
 
 Serviço Node.js + TypeScript que recebe mensagens de texto e áudio via WhatsApp
-(WaSenderAPI), interpreta a intenção com a API da Anthropic e cria tarefas no
-app ONE (Lovable + Supabase). Também envia avisos diários de tarefas atrasadas.
+(WaSenderAPI), interpreta a intenção com a API da OpenAI e cria tarefas no
+app ONE (Lovable) via API pública. Também envia códigos de verificação e
+avisos diários de tarefas.
 
 ## Arquitetura
 
 ```
 WaSenderAPI ──webhook──▶ POST /webhooks/whatsapp
                               │
-                              ▼
-              profiles (Supabase, service role) ── só telefones verificados
+              GET {ONE_APP_URL}/api/public/whatsapp/perfil?telefone= ── só verificados
                               │
               áudio? ─▶ Whisper (transcrição pt-BR)
                               │
               conversa pendente? ─▶ trata como resposta à pergunta
                               │
-              Anthropic tool use: criar_tarefa | pedir_esclarecimento
+              OpenAI tool use: criar_tarefa | pedir_esclarecimento
                               │
               resolve responsável (ambíguo? pergunta de volta)
                               │
               papel gestor? ─▶ POST {ONE_APP_URL}/api/public/whatsapp/comandos/criar-tarefa
                               │
-              confirmação via WaSenderAPI + log em whatsapp_mensagens_log
+              confirmação via WaSenderAPI + agenda do responsável (notificarAgenda)
 
 node-cron (a cada 15 min) ─▶ GET {ONE_APP_URL}/api/public/whatsapp/avisos-do-dia
                           ─▶ envia resumos com delay anti-rajada (1,5–2s)
@@ -55,24 +55,26 @@ npm run simulate -- ambiguo   # "Vitor" bate em 2 pessoas → pergunta pendente
 npm run simulate -- resposta  # responde "Vitor Almeida" → resolve e cria
 ```
 
-Com `MOCK_EXTERNAL=true` todas as integrações (WaSenderAPI, Whisper, Anthropic,
-Supabase, ONE) viram stubs em memória com dados de exemplo — nenhuma chave é
-necessária e o segredo do webhook vira `mock`.
+Com `MOCK_EXTERNAL=true` todas as integrações (WaSenderAPI, OpenAI, ONE) viram
+stubs em memória com dados de exemplo — nenhuma chave é necessária e o segredo
+do webhook vira `mock`.
 
 ## Variáveis de ambiente
 
-Ver [.env.example](.env.example). Sem `MOCK_EXTERNAL=true`, todas as chaves são
-obrigatórias e o processo falha no boot se faltar alguma.
+Ver [.env.example](.env.example). Obrigatórias (sem `MOCK_EXTERNAL=true`):
+`WASENDER_API_KEY`, `WASENDER_WEBHOOK_SECRET`, `OPENAI_API_KEY`,
+`WHATSAPP_SERVICE_SECRET`. `ONE_APP_URL` é opcional (padrão
+`https://onedashboard.app`); `OPENAI_MODEL` padrão `gpt-4o-mini`.
 
 ## Comportamentos importantes
 
-- **Dedupe persistido**: o `message_id` do webhook é checado contra
-  `whatsapp_mensagens_log` antes de processar — reinícios/deploys não causam
-  reprocessamento nem respostas duplicadas.
-- **Aviso diário idempotente**: antes de enviar, consulta o log
-  (`tipo = 'aviso_diario'`, mesmo telefone/dia). Deploy no meio do dia
-  não reenvia avisos. O One App decide quem deve ser avisado a cada consulta;
-  o worker apenas faz polling a cada 15 min.
+- **Estado em memória**: dedupe de mensagens, conversas pendentes e controle de
+  avisos enviados vivem só no processo — um restart/deploy zera esse estado
+  (uma mensagem antiga reenviada pelo WaSender pode ser reprocessada e o aviso
+  diário pode reenviar uma vez). Logs saem como JSON no stdout.
+- **Aviso diário idempotente por processo**: 1 aviso por telefone/dia. O One App
+  decide quem deve ser avisado a cada consulta; o worker apenas faz polling a
+  cada 15 min.
 - **Delay anti-banimento**: 1,5–2s (com jitter) entre envios no job diário.
 - **Webhook sempre responde 200** (exceto assinatura inválida → 401) para o
   WaSenderAPI não reenviar o payload.
@@ -86,47 +88,6 @@ obrigatórias e o processo falha no boot se faltar alguma.
   prazo (`notificarAgenda`), sem dedupe diário.
 - **Pendências expiram em 24h** (ignoradas na busca).
 
-## Schema esperado no Supabase (já criado pelo app ONE)
-
-O worker **não** roda migrations; ele assume estas tabelas/colunas:
-
-```sql
-profiles (
-  id uuid pk,
-  clinica_id uuid,
-  nome_completo text,
-  telefone_whatsapp text,
-  whatsapp_verificado boolean,
-  papel text                        -- 'gestor' | 'colaborador' | ...
-)
-
-whatsapp_conversas (
-  id uuid pk default gen_random_uuid(),
-  telefone text,
-  clinica_id uuid,
-  profile_id uuid,
-  pergunta text,
-  contexto jsonb,                   -- { descricao, prazo, candidatos: [{id, nome_completo}] }
-  status text,                      -- 'aguardando_resposta' | 'resolvida'
-  created_at timestamptz default now()
-)
-
-whatsapp_mensagens_log (
-  id uuid pk default gen_random_uuid(),
-  message_id text,
-  telefone text,
-  profile_id uuid,
-  clinica_id uuid,
-  tipo text,                        -- 'texto' | 'audio' | 'aviso_diario'
-  texto_original text,
-  transcricao text,
-  interpretacao jsonb,
-  resultado text,                   -- 'tarefa_criada' | 'nao_autorizado' | ...
-  tarefa_id text,
-  created_at timestamptz default now()
-)
-```
-
 ## Contratos consumidos do app ONE
 
 Todas as chamadas usam o header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}`.
@@ -139,6 +100,11 @@ Todas as chamadas usam o header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}
 — sem filtros: todos que devem ser avisados hoje; com filtros: agenda de uma pessoa/data
 — resposta: `{ dia, avisos: [{ profile_id, telefone, nome, tarefas_hoje: string[], tarefas_atrasadas: string[] }] }`
 
+`GET {ONE_APP_URL}/api/public/whatsapp/perfil?telefone=5511999999999`
+— só retorna perfil de telefone **verificado**; `perfil: null` caso contrário
+— resposta: `{ perfil: { id, clinica_id, nome_completo, papel } | null, colaboradores: [{ id, nome_completo }] }`
+  (`colaboradores` = todos da mesma clínica, usados para resolver o responsável)
+
 ## Contratos expostos para o app ONE
 
 `POST /verificacao`
@@ -149,9 +115,8 @@ Todas as chamadas usam o header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}
 
 ## Checklist antes de sair do modo mock
 
-1. [ ] Prompts do Lovable executados no ONE (tabelas WhatsApp + endpoints `/api/public/whatsapp/*`)
-2. [ ] Tabelas `whatsapp_conversas`, `whatsapp_mensagens_log` e colunas de `profiles` conferidas no Supabase
-3. [ ] Smoke test do `criar-tarefa`, do `avisos-do-dia` e do `/verificacao` com o `WHATSAPP_SERVICE_SECRET` real
-4. [ ] Formato real do payload de webhook do WaSenderAPI conferido contra `extrairMensagem` (src/routes/webhook.ts)
-5. [ ] Webhook cadastrado no painel do WaSenderAPI apontando para `https://<host>/webhooks/whatsapp`
-6. [ ] URL do worker (`https://<host>/verificacao`) configurada no One App
+1. [ ] Prompts do Lovable executados no ONE (endpoints `/api/public/whatsapp/*`, incluindo `perfil`)
+2. [ ] Smoke test do `criar-tarefa`, `avisos-do-dia`, `perfil` e `/verificacao` com o `WHATSAPP_SERVICE_SECRET` real
+3. [ ] Formato real do payload de webhook do WaSenderAPI conferido contra `extrairMensagem` (src/routes/webhook.ts)
+4. [ ] Webhook cadastrado no painel do WaSenderAPI apontando para `https://<host>/webhooks/whatsapp`
+5. [ ] URL do worker (`https://<host>/verificacao`) configurada no One App

@@ -24,7 +24,7 @@ export async function processarMensagem(
 
   const tipo = msg.audioUrl ? 'audio' : 'texto';
 
-  const perfil = await deps.db.buscarPerfilPorTelefone(msg.telefone);
+  const { perfil, colaboradores } = await deps.one.buscarPerfil(msg.telefone);
   if (!perfil) {
     await deps.whats.enviarMensagem(
       msg.telefone,
@@ -83,7 +83,6 @@ export async function processarMensagem(
     return;
   }
 
-  const colaboradores = await deps.db.listarColaboradores(perfil.clinica_id);
   const interpretacao = await deps.interpretar(
     texto,
     colaboradores.map((c) => c.nome_completo),

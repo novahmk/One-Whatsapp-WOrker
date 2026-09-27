@@ -1,5 +1,14 @@
 import { Config } from '../config';
-import { AvisoPessoa, CriarTarefaBody, CriarTarefaResposta, Deps, FiltroAvisos } from '../types';
+import {
+  AvisoPessoa,
+  Colaborador,
+  CriarTarefaBody,
+  CriarTarefaResposta,
+  Deps,
+  FiltroAvisos,
+  Perfil,
+  PerfilResposta,
+} from '../types';
 
 export function criarOneApp(cfg: Config): Deps['one'] {
   const headers = {
@@ -33,6 +42,19 @@ export function criarOneApp(cfg: Config): Deps['one'] {
       }
       const corpo = (await r.json()) as { avisos?: AvisoPessoa[] };
       return corpo.avisos ?? [];
+    },
+
+    async buscarPerfil(telefone: string): Promise<PerfilResposta> {
+      const url = `${cfg.ONE_APP_URL}/api/public/whatsapp/perfil?telefone=${encodeURIComponent(telefone)}`;
+      const r = await fetch(url, { headers });
+      if (!r.ok) {
+        throw new Error(`ONE perfil falhou: HTTP ${r.status}`);
+      }
+      const corpo = (await r.json()) as {
+        perfil?: Perfil | null;
+        colaboradores?: Colaborador[];
+      };
+      return { perfil: corpo.perfil ?? null, colaboradores: corpo.colaboradores ?? [] };
     },
   };
 }
