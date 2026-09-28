@@ -27,7 +27,7 @@ export function criarOneApp(cfg: Config): Deps['one'] {
         body: JSON.stringify(body),
       });
       if (!r.ok) {
-        return { sucesso: false, erro: `ONE respondeu HTTP ${r.status}` };
+        return { sucesso: false, erro: `ONE respondeu HTTP ${r.status}: ${(await r.text()).slice(0, 200)}` };
       }
       return (await r.json()) as CriarTarefaResposta;
     },
@@ -39,7 +39,7 @@ export function criarOneApp(cfg: Config): Deps['one'] {
         body: JSON.stringify(body),
       });
       if (!r.ok) {
-        return { sucesso: false, erro: `ONE respondeu HTTP ${r.status}` };
+        return { sucesso: false, erro: `ONE respondeu HTTP ${r.status}: ${(await r.text()).slice(0, 200)}` };
       }
       return (await r.json()) as ConcluirTarefaResposta;
     },
@@ -53,7 +53,7 @@ export function criarOneApp(cfg: Config): Deps['one'] {
         headers,
       });
       if (!r.ok) {
-        throw new Error(`ONE avisos-do-dia falhou: HTTP ${r.status}`);
+        throw new Error(`ONE avisos-do-dia falhou: HTTP ${r.status} ${await r.text()}`);
       }
       const corpo = (await r.json()) as { avisos?: AvisoPessoa[] };
       return corpo.avisos ?? [];
@@ -67,7 +67,7 @@ export function criarOneApp(cfg: Config): Deps['one'] {
         { headers },
       );
       if (!r.ok) {
-        throw new Error(`ONE agenda falhou: HTTP ${r.status}`);
+        throw new Error(`ONE agenda falhou: HTTP ${r.status} ${await r.text()}`);
       }
       const corpo = (await r.json()) as { data?: string; itens?: AgendaResposta['itens'] };
       return { data: corpo.data ?? (data ?? ''), itens: corpo.itens ?? [] };
@@ -93,14 +93,27 @@ export function criarOneApp(cfg: Config): Deps['one'] {
         console.error(`ONE perfil falhou: HTTP ${r.status}`);
         return { perfil: null, colaboradores: [], erro: `HTTP ${r.status}` };
       }
-      let corpo: { perfil?: Perfil | null; colaboradores?: Colaborador[] };
+      let corpo: any;
       try {
-        corpo = (await r.json()) as typeof corpo;
+        corpo = await r.json();
       } catch (e) {
         console.error('ONE perfil: resposta não-JSON', e);
         return { perfil: null, colaboradores: [], erro: 'json' };
       }
-      return { perfil: corpo.perfil ?? null, colaboradores: corpo.colaboradores ?? [] };
+      const p = corpo.perfil;
+      const perfil = p
+        ? {
+            id: p.profile_id ?? p.id,
+            nome_completo: p.nome ?? p.nome_completo,
+            clinica_id: p.clinica_id,
+            papel: p.papel ?? p.role,
+          }
+        : null;
+      const colaboradores = (corpo.colaboradores ?? []).map((c: any) => ({
+        id: c.profile_id ?? c.id,
+        nome_completo: c.nome ?? c.nome_completo,
+      }));
+      return { perfil, colaboradores };
     },
   };
 }
