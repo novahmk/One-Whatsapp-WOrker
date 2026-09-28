@@ -234,9 +234,11 @@ describe('processarMensagem', () => {
     );
 
     expect(estado.tarefas).toHaveLength(0);
-    expect(estado.enviadas.at(-1)?.texto).toBe(
-      'Pra 2026-09-28 você tem: Reunião com Bruno às 14:00, Follow-up cliente X.',
-    );
+    const resposta = estado.enviadas.at(-1)?.texto ?? '';
+    expect(resposta).toContain('📅 *Sua agenda de hoje*');
+    expect(resposta).toContain('*14:00* · Reunião com Bruno');
+    expect(resposta).toContain('• Follow-up cliente X');
+    expect(resposta).toContain('✅ 1 com horário · 1 sem horário');
     expect(estado.logs.at(-1)?.resultado).toBe('agenda_consultada');
   });
 

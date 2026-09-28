@@ -20,6 +20,7 @@ export interface MensagemRecebida {
   texto?: string;
   audioUrl?: string;
   audioMimetype?: string;
+  bruta?: unknown;
 }
 
 export type Interpretacao =
@@ -138,6 +139,7 @@ export interface FiltroAvisos {
 export interface AgendaItem {
   titulo: string;
   horario?: string | null;
+  concluida?: boolean;
 }
 
 export interface AgendaResposta {
@@ -158,7 +160,7 @@ export interface Deps {
   };
   whats: {
     enviarMensagem(telefone: string, texto: string): Promise<void>;
-    baixarMidia(url: string): Promise<Buffer>;
+    baixarAudio(mensagemBruta: unknown): Promise<Buffer>;
   };
   transcrever(audio: Buffer, mimetype?: string): Promise<string>;
   interpretar(texto: string, colaboradores: string[], dataAtual: string): Promise<Interpretacao>;

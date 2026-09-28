@@ -69,8 +69,15 @@ export function criarOneApp(cfg: Config): Deps['one'] {
       if (!r.ok) {
         throw new Error(`ONE agenda falhou: HTTP ${r.status} ${await r.text()}`);
       }
-      const corpo = (await r.json()) as { data?: string; itens?: AgendaResposta['itens'] };
-      return { data: corpo.data ?? (data ?? ''), itens: corpo.itens ?? [] };
+      const corpo: any = await r.json();
+      // ONE responde "tarefas"; aceita também "itens" e nomes alternativos de campos.
+      const brutos: any[] = corpo.tarefas ?? corpo.itens ?? [];
+      const itens = brutos.map((t) => ({
+        titulo: t.titulo ?? t.nome ?? '',
+        horario: t.horario_sugerido ?? t.horario ?? null,
+        concluida: t.concluida ?? false,
+      }));
+      return { data: corpo.data ?? (data ?? ''), itens };
     },
 
     async buscarPerfil(telefone: string): Promise<PerfilResposta> {

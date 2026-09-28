@@ -34,6 +34,7 @@ export function extrairMensagem(payload: unknown): MensagemRecebida | null {
     texto,
     audioUrl,
     audioMimetype: audio?.mimetype ?? undefined,
+    bruta: msg,
   };
 }
 

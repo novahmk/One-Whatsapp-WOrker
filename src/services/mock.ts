@@ -160,7 +160,7 @@ export function criarDepsMock(parcial: Partial<EstadoMock> = {}): {
         estado.enviadas.push({ telefone, texto });
         console.log(`[MOCK wasender] → ${telefone}: ${texto}`);
       },
-      async baixarMidia() {
+      async baixarAudio() {
         return Buffer.from('audio-fake');
       },
     },

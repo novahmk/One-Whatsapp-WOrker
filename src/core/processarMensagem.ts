@@ -9,6 +9,7 @@ import {
   Perfil,
 } from '../types';
 import { dataLocalISO } from '../util/tempo';
+import { formatarAgenda } from '../services/formatarAgenda';
 import { resolverResponsavel } from './resolverResponsavel';
 import { resolverTarefa } from './resolverTarefa';
 
@@ -58,7 +59,7 @@ export async function processarMensagem(
   let transcricao: string | undefined;
   if (msg.audioUrl) {
     try {
-      const audio = await deps.whats.baixarMidia(msg.audioUrl);
+      const audio = await deps.whats.baixarAudio(msg.bruta);
       transcricao = (await deps.transcrever(audio, msg.audioMimetype)).trim();
     } catch (e) {
       console.error('Falha ao baixar/transcrever áudio:', e);
@@ -79,6 +80,8 @@ export async function processarMensagem(
       return;
     }
     texto = transcricao;
+    // Eco da transcrição: se o Whisper errar um nome, o usuário percebe na hora.
+    await deps.whats.enviarMensagem(msg.telefone, `🎙️ Entendi: _"${texto}"_`);
   }
 
   const base: BaseLog = {
@@ -128,11 +131,6 @@ export async function processarMensagem(
   await fluxoCriarTarefa(interpretacao, perfil, colaboradores, base, deps);
 }
 
-function montarAgenda(data: string, itens: string[]): string {
-  if (itens.length === 0) return `Você não tem nada agendado para ${data}.`;
-  return `Pra ${data} você tem: ${itens.join(', ')}.`;
-}
-
 async function fluxoConsultarAgenda(
   interpretacao: Extract<Interpretacao, { tipo: 'consultar_agenda' }>,
   perfil: Perfil,
@@ -142,8 +140,13 @@ async function fluxoConsultarAgenda(
 ): Promise<void> {
   const dataRef = interpretacao.data ?? dataLocalISO(cfg.TZ_AVISOS);
   const agenda = await deps.one.buscarAgenda(perfil.id, dataRef);
-  const itens = agenda.itens.map((i) => (i.horario ? `${i.titulo} às ${i.horario}` : i.titulo));
-  await deps.whats.enviarMensagem(base.telefone, montarAgenda(agenda.data || dataRef, itens));
+  const itens = agenda.itens.map((i) => ({
+    titulo: i.titulo,
+    horario_sugerido: i.horario,
+    concluida: i.concluida,
+  }));
+  const dia = new Date(`${agenda.data || dataRef}T12:00:00-03:00`);
+  await deps.whats.enviarMensagem(base.telefone, formatarAgenda(itens, dia));
   await deps.db.registrarLog({ ...base, interpretacao, resultado: 'agenda_consultada' });
 }
 

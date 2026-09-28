@@ -21,12 +21,26 @@ export function criarWasender(cfg: Config): Deps['whats'] {
       }
     },
 
-    async baixarMidia(url: string): Promise<Buffer> {
-      const r = await fetch(url);
+    // WaSender criptografa a mídia; é preciso pedir a URL decifrada antes de baixar.
+    async baixarAudio(mensagemBruta: unknown): Promise<Buffer> {
+      const r = await fetch(`${BASE_URL}/decrypt-media`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${cfg.WASENDER_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ data: { messages: mensagemBruta } }),
+      });
       if (!r.ok) {
-        throw new Error(`Falha ao baixar mídia (${r.status}): ${url}`);
+        throw new Error(`Decrypt falhou: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
       }
-      return Buffer.from(await r.arrayBuffer());
+      const j: any = await r.json();
+      const url = j.publicUrl ?? j.url;
+      const audio = await fetch(url);
+      if (!audio.ok) {
+        throw new Error(`Falha ao baixar mídia decifrada (${audio.status})`);
+      }
+      return Buffer.from(await audio.arrayBuffer());
     },
   };
 }
