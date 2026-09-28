@@ -74,7 +74,6 @@ export type ResultadoLog =
   | 'nao_reconhecido'
   | 'erro_perfil'
   | 'responsavel_nao_encontrado'
-  | 'remetente_lid_nao_suportado'
   | 'sem_acao'
   | 'aviso_enviado'
   | 'erro';

@@ -196,9 +196,12 @@ export function criarDepsMock(parcial: Partial<EstadoMock> = {}): {
         return estado.avisos;
       },
       async buscarPerfil(telefone) {
+        // Espelha o One App: JID @s.whatsapp.net casa pelo número; @lid só casaria por jid.
+        const [usuario, servidor] = telefone.split('@');
+        const chave = !servidor || servidor === 's.whatsapp.net' ? usuario : telefone;
         const encontrado =
           estado.perfis.find(
-            (p) => p.telefone_whatsapp === telefone && p.whatsapp_verificado,
+            (p) => p.telefone_whatsapp === chave && p.whatsapp_verificado,
           ) ?? null;
         if (!encontrado) return { perfil: null, colaboradores: [] };
         const { telefone_whatsapp, whatsapp_verificado, ...perfil } = encontrado;

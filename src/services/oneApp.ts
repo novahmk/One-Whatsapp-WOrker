@@ -74,7 +74,10 @@ export function criarOneApp(cfg: Config): Deps['one'] {
     },
 
     async buscarPerfil(telefone: string): Promise<PerfilResposta> {
-      const url = `${cfg.ONE_APP_URL}/api/public/whatsapp/perfil?telefone=${encodeURIComponent(telefone)}`;
+      const [usuario, servidor] = telefone.split('@');
+      const params = new URLSearchParams({ jid: telefone });
+      if (servidor === 's.whatsapp.net') params.set('telefone', usuario);
+      const url = `${cfg.ONE_APP_URL}/api/public/whatsapp/perfil?${params}`;
       let r: Response;
       try {
         r = await fetch(url, { headers });
