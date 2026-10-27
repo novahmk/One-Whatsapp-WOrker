@@ -125,6 +125,28 @@ describe('POST /webhooks/whatsapp', () => {
     await app.close();
   });
 
+  it('ignora reentrega do mesmo messageId', async () => {
+    const { deps, estado } = criarDepsMock();
+    const app = criarServidor(deps, cfg);
+
+    const envio = () =>
+      app.inject({
+        method: 'POST',
+        url: '/webhooks/whatsapp',
+        headers: { 'x-webhook-signature': cfg.WASENDER_WEBHOOK_SECRET },
+        payload: fixtureTexto,
+      });
+
+    const primeira = await envio();
+    const segunda = await envio();
+
+    expect(primeira.json()).toEqual({ received: true });
+    expect(segunda.statusCode).toBe(200);
+    expect(segunda.json()).toEqual({ received: true, duplicada: true });
+    expect(estado.tarefas).toHaveLength(1);
+    await app.close();
+  });
+
   it('responde 200 e ignora payload sem mensagem útil', async () => {
     const { deps, estado } = criarDepsMock();
     const app = criarServidor(deps, cfg);

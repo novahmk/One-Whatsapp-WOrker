@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { Config } from '../config';
 import { Deps, Interpretacao } from '../types';
+import { TIMEOUT_EXTERNO_MS, comServico } from '../util/externo';
 
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
@@ -91,33 +92,35 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 ];
 
 export function criarInterpretador(cfg: Config): Deps['interpretar'] {
-  const client = new OpenAI({ apiKey: cfg.OPENAI_API_KEY });
+  const client = new OpenAI({ apiKey: cfg.OPENAI_API_KEY, timeout: TIMEOUT_EXTERNO_MS });
 
   return async (texto, colaboradores, dataAtual): Promise<Interpretacao> => {
-    const resposta = await client.chat.completions.create({
-      model: cfg.OPENAI_MODEL,
-      max_tokens: 1024,
-      tools: TOOLS,
-      messages: [
-        {
-          role: 'system',
-          content: [
-            'Você é o assistente de WhatsApp do ONE, um sistema de gestão de empresas. Você só executa ações, não conversa.',
-            `Hoje é ${dataAtual}. Converta datas ("amanhã", "sexta", "28 de outubro") para YYYY-MM-DD.`,
-            `Pessoas da equipe: ${colaboradores.join(', ')}.`,
-            'Para criar uma tarefa, reunião ou compromisso você precisa de 4 dados: pessoa, o que fazer, data e horário.',
-            '- pessoa: o nome citado. Em "reunião com Bruno", a pessoa é Bruno.',
-            '- titulo: o que fazer, curto (ex: "Reunião com Bruno").',
-            '- prazo: a data. Sem data citada, use a data de hoje.',
-            '- horario: HH:MM somente se citado ("às 14h" = 14:00). Sem horário, omita o campo.',
-            'Se tiver pessoa e tarefa, chame criar_tarefa imediatamente. Nunca peça descrição, prioridade ou detalhes extras.',
-            'Só chame pedir_esclarecimento se faltar a pessoa ou o que fazer.',
-            'Use consultar_agenda somente para perguntas ("o que tenho hoje?"). Use concluir_tarefa quando disserem que terminaram algo.',
-          ].join('\n'),
-        },
-        { role: 'user', content: texto },
-      ],
-    });
+    const resposta = await comServico('openai', 'interpretar-mensagem', () =>
+      client.chat.completions.create({
+        model: cfg.OPENAI_MODEL,
+        max_tokens: 1024,
+        tools: TOOLS,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'Você é o assistente de WhatsApp do ONE, um sistema de gestão de empresas. Você só executa ações, não conversa.',
+              `Hoje é ${dataAtual}. Converta datas ("amanhã", "sexta", "28 de outubro") para YYYY-MM-DD.`,
+              `Pessoas da equipe: ${colaboradores.join(', ')}.`,
+              'Para criar uma tarefa, reunião ou compromisso você precisa de 4 dados: pessoa, o que fazer, data e horário.',
+              '- pessoa: o nome citado. Em "reunião com Bruno", a pessoa é Bruno.',
+              '- titulo: o que fazer, curto (ex: "Reunião com Bruno").',
+              '- prazo: a data. Sem data citada, use a data de hoje.',
+              '- horario: HH:MM somente se citado ("às 14h" = 14:00). Sem horário, omita o campo.',
+              'Se tiver pessoa e tarefa, chame criar_tarefa imediatamente. Nunca peça descrição, prioridade ou detalhes extras.',
+              'Só chame pedir_esclarecimento se faltar a pessoa ou o que fazer.',
+              'Use consultar_agenda somente para perguntas ("o que tenho hoje?"). Use concluir_tarefa quando disserem que terminaram algo.',
+            ].join('\n'),
+          },
+          { role: 'user', content: texto },
+        ],
+      }),
+    );
 
     const msg = resposta.choices[0]?.message;
     const call = msg?.tool_calls?.find((t) => t.type === 'function');

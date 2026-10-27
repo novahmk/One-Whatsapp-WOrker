@@ -1,6 +1,7 @@
 import OpenAI, { toFile } from 'openai';
 import { Config } from '../config';
 import { Deps } from '../types';
+import { TIMEOUT_TRANSCRICAO_MS, comServico } from '../util/externo';
 
 const EXTENSOES: Record<string, string> = {
   'audio/ogg': 'ogg',
@@ -26,21 +27,23 @@ export function extensaoAudio(mimetype?: string): string {
 }
 
 export function criarTranscritor(cfg: Config): Deps['transcrever'] {
-  const client = new OpenAI({ apiKey: cfg.OPENAI_API_KEY });
+  const client = new OpenAI({ apiKey: cfg.OPENAI_API_KEY, timeout: TIMEOUT_TRANSCRICAO_MS });
 
   return async (audio: Buffer, mimetype?: string): Promise<string> => {
     const ext = extensaoAudio(mimetype);
     const inicio = Date.now();
 
-    const resultado = await client.audio.transcriptions.create({
-      file: await toFile(audio, `audio.${ext}`, {
-        type: mimetypeBase(mimetype) || 'audio/ogg',
+    const resultado = await comServico('openai', 'transcrever-audio', async () =>
+      client.audio.transcriptions.create({
+        file: await toFile(audio, `audio.${ext}`, {
+          type: mimetypeBase(mimetype) || 'audio/ogg',
+        }),
+        model: 'whisper-1',
+        language: 'pt',
+        response_format: 'verbose_json',
+        temperature: 0.2,
       }),
-      model: 'whisper-1',
-      language: 'pt',
-      response_format: 'verbose_json',
-      temperature: 0.2,
-    });
+    );
 
     console.log(`Áudio transcrito em ${Date.now() - inicio}ms (${audio.length} bytes, .${ext})`);
     return String(resultado.text ?? '').trim();

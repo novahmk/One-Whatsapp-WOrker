@@ -12,6 +12,7 @@ import {
   Perfil,
   PerfilResposta,
 } from '../types';
+import { ErroServicoExterno, fetchExterno } from '../util/externo';
 
 export function criarOneApp(cfg: Config): Deps['one'] {
   const headers = {
@@ -21,11 +22,16 @@ export function criarOneApp(cfg: Config): Deps['one'] {
 
   return {
     async criarTarefa(body: CriarTarefaBody): Promise<CriarTarefaResposta> {
-      const r = await fetch(`${cfg.ONE_APP_URL}/api/public/whatsapp/comandos/criar-tarefa`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-      });
+      const r = await fetchExterno(
+        'one-app',
+        'criar-tarefa',
+        `${cfg.ONE_APP_URL}/api/public/whatsapp/comandos/criar-tarefa`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        },
+      );
       if (!r.ok) {
         return { sucesso: false, erro: `ONE respondeu HTTP ${r.status}: ${(await r.text()).slice(0, 200)}` };
       }
@@ -33,11 +39,16 @@ export function criarOneApp(cfg: Config): Deps['one'] {
     },
 
     async concluirTarefa(body: ConcluirTarefaBody): Promise<ConcluirTarefaResposta> {
-      const r = await fetch(`${cfg.ONE_APP_URL}/api/public/whatsapp/comandos/concluir-tarefa`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-      });
+      const r = await fetchExterno(
+        'one-app',
+        'concluir-tarefa',
+        `${cfg.ONE_APP_URL}/api/public/whatsapp/comandos/concluir-tarefa`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        },
+      );
       if (!r.ok) {
         return { sucesso: false, erro: `ONE respondeu HTTP ${r.status}: ${(await r.text()).slice(0, 200)}` };
       }
@@ -49,11 +60,18 @@ export function criarOneApp(cfg: Config): Deps['one'] {
       if (filtro?.profileId) query.set('profile_id', filtro.profileId);
       if (filtro?.data) query.set('data', filtro.data);
       const sufixo = query.size > 0 ? `?${query}` : '';
-      const r = await fetch(`${cfg.ONE_APP_URL}/api/public/whatsapp/avisos-do-dia${sufixo}`, {
-        headers,
-      });
+      const r = await fetchExterno(
+        'one-app',
+        'avisos-do-dia',
+        `${cfg.ONE_APP_URL}/api/public/whatsapp/avisos-do-dia${sufixo}`,
+        { headers },
+      );
       if (!r.ok) {
-        throw new Error(`ONE avisos-do-dia falhou: HTTP ${r.status} ${await r.text()}`);
+        throw new ErroServicoExterno(
+          'one-app',
+          'avisos-do-dia',
+          new Error(`HTTP ${r.status} ${(await r.text()).slice(0, 200)}`),
+        );
       }
       const corpo = (await r.json()) as { avisos?: AvisoPessoa[] };
       return corpo.avisos ?? [];
@@ -62,12 +80,18 @@ export function criarOneApp(cfg: Config): Deps['one'] {
     async buscarAgenda(profileId: string, data?: string): Promise<AgendaResposta> {
       const query = new URLSearchParams({ profile_id: profileId });
       if (data) query.set('data', data);
-      const r = await fetch(
+      const r = await fetchExterno(
+        'one-app',
+        'agenda',
         `${cfg.ONE_APP_URL}/api/public/whatsapp/comandos/agenda?${query}`,
         { headers },
       );
       if (!r.ok) {
-        throw new Error(`ONE agenda falhou: HTTP ${r.status} ${await r.text()}`);
+        throw new ErroServicoExterno(
+          'one-app',
+          'agenda',
+          new Error(`HTTP ${r.status} ${(await r.text()).slice(0, 200)}`),
+        );
       }
       const corpo: any = await r.json();
       // ONE responde "tarefas"; aceita também "itens" e nomes alternativos de campos.
@@ -87,7 +111,7 @@ export function criarOneApp(cfg: Config): Deps['one'] {
       const url = `${cfg.ONE_APP_URL}/api/public/whatsapp/perfil?${params}`;
       let r: Response;
       try {
-        r = await fetch(url, { headers });
+        r = await fetchExterno('one-app', 'perfil', url, { headers });
       } catch (e) {
         console.error('ONE perfil: falha de rede', e);
         return { perfil: null, colaboradores: [], erro: 'rede' };
