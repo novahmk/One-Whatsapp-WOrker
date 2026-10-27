@@ -26,11 +26,12 @@ export interface MensagemRecebida {
 export type Interpretacao =
   | {
       tipo: 'criar_tarefa';
-      responsavel: string;
+      responsaveis: string[];
       titulo: string;
       descricao?: string;
       prazo?: string;
       horario?: string;
+      mensagem?: string;
     }
   | { tipo: 'consultar_agenda'; data?: string }
   | { tipo: 'concluir_tarefa'; titulo: string }
@@ -49,6 +50,12 @@ export type ContextoPendente =
       descricao?: string;
       prazo?: string;
       horario?: string;
+      mensagem?: string;
+      /** Responsáveis já definidos nas rodadas anteriores. */
+      resolvidos: Colaborador[];
+      /** Nomes ainda não resolvidos; o primeiro é o que está sendo perguntado. */
+      pendentes: string[];
+      /** Candidatos do nome que está sendo perguntado. */
       candidatos: Colaborador[];
     }
   | { tipo: 'concluir'; profile_id: string; candidatos: TarefaRef[] };
@@ -75,6 +82,7 @@ export type ResultadoLog =
   | 'nao_reconhecido'
   | 'erro_perfil'
   | 'responsavel_nao_encontrado'
+  | 'limite_responsaveis'
   | 'sem_acao'
   | 'aviso_enviado'
   | 'erro';
@@ -95,11 +103,18 @@ export interface LogEntrada {
 export interface CriarTarefaBody {
   clinica_id: string;
   criado_por_profile_id: string;
+  /** Mantido para compatibilidade: nome do primeiro responsável. */
   responsavel_nome: string;
+  /** Mantido para compatibilidade: profile_id do primeiro responsável. */
+  responsavel_id?: string;
+  /** Contrato novo: profile_id de todos os responsáveis (até MAX_RESPONSAVEIS). */
+  responsaveis: string[];
+  responsaveis_nomes: string[];
   titulo: string;
   descricao?: string;
   prazo?: string;
   horario?: string | null;
+  mensagem_personalizada?: string;
 }
 
 export interface CriarTarefaResposta {

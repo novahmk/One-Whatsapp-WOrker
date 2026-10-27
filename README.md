@@ -87,8 +87,12 @@ Ver [.env.example](.env.example). Obrigatórias (sem `MOCK_EXTERNAL=true`):
   orientação para pedir liberação ao gestor e o evento é logado como
   `nao_reconhecido`.
 - **Notificação do responsável é do One App**: após criar a tarefa, o worker só
-  confirma ao remetente (dados locais); o One App avisa o responsável chamando
-  `POST /notificar`.
+  confirma ao remetente (dados locais); o One App avisa cada responsável
+  chamando `POST /notificar` uma vez por pessoa.
+- **Até 5 responsáveis por tarefa**: o worker resolve todos os nomes citados
+  antes de criar; se algum for ambíguo, pergunta um de cada vez e só cria
+  quando a lista inteira estiver resolvida. Nenhuma tarefa é criada
+  parcialmente.
 - **Pendências expiram em 24h** (ignoradas na busca).
 
 ## Contratos consumidos do app ONE
@@ -96,8 +100,10 @@ Ver [.env.example](.env.example). Obrigatórias (sem `MOCK_EXTERNAL=true`):
 Todas as chamadas usam o header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}`.
 
 `POST {ONE_APP_URL}/api/public/whatsapp/comandos/criar-tarefa`
-— body `{ clinica_id, criado_por_profile_id, responsavel_nome, titulo, descricao?, prazo, horario }`
-  (`titulo` obrigatório; `descricao` opcional; `horario` HH:MM ou `null`, mapeado para `horario_sugerido`)
+— body `{ clinica_id, criado_por_profile_id, responsaveis: string[], responsaveis_nomes: string[], responsavel_id, responsavel_nome, titulo, descricao?, prazo, horario, mensagem_personalizada? }`
+  (`responsaveis` = profile_ids, de 1 até 5; `responsavel_id`/`responsavel_nome` repetem o primeiro
+  apenas por compatibilidade com o contrato antigo. `titulo` obrigatório; `descricao` opcional;
+  `horario` HH:MM ou `null`, mapeado para `horario_sugerido`)
 — resposta `{ sucesso: boolean, tarefa_id?: string, responsavel_profile_id?: string, erro?: string }`
 
 `GET {ONE_APP_URL}/api/public/whatsapp/avisos-do-dia[?profile_id=...&data=YYYY-MM-DD]`
@@ -127,8 +133,14 @@ Todas as chamadas usam o header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}
 
 `POST /notificar`
 — header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}`
-— body `{ telefone, tipo: "tarefa_atribuida", dados: { titulo, data_vencimento, horario_sugerido?, criado_por_nome } }`
-— mensagem: "Você tem uma nova tarefa: {titulo}, para {data_vencimento}[ às {horario_sugerido}]. Criada por {criado_por_nome}."
+— body `{ telefone, tipo: "tarefa_atribuida", dados: { titulo, data_vencimento, horario_sugerido?, criado_por_nome, destinatario_id?, responsaveis?, mensagem_personalizada? } }`
+— **formato antigo** (sem `responsaveis`): "Você tem uma nova tarefa: {titulo}, para {data_vencimento}[ às {horario_sugerido}]. Criada por {criado_por_nome}."
+— **multi-responsáveis**: enviar `responsaveis: [{ profile_id, nome }]` (1 a 5) + `destinatario_id`
+  (o `profile_id` de quem recebe esta chamada). O ONE chama a rota **uma vez por responsável**;
+  a mensagem sai na perspectiva de cada um:
+  - 1 pessoa → "Foi atribuída uma tarefa para você."
+  - 2+ → "Foi atribuída uma tarefa para você e equipe: você, Ana Souza e Vitor Almeida."
+  `destinatario_id` é obrigatório quando `responsaveis` é informado (senão 400)
 — mesmos códigos de resposta do `/verificacao`; novos `tipo`s são extensão futura
 
 ## Checklist antes de sair do modo mock

@@ -10,7 +10,11 @@ import {
 } from '../types';
 import { dataLocalISO } from '../util/tempo';
 import { formatarAgenda } from '../services/formatarAgenda';
-import { resolverResponsavel } from './resolverResponsavel';
+import {
+  MAX_RESPONSAVEIS,
+  montarConfirmacaoCriacao,
+} from '../services/formatarAtribuicao';
+import { resolverResponsavel, resolverResponsaveis } from './resolverResponsavel';
 import { resolverTarefa } from './resolverTarefa';
 
 type BaseLog = Omit<LogEntrada, 'resultado' | 'tarefa_id' | 'interpretacao'>;
@@ -96,7 +100,15 @@ export async function processarMensagem(
 
   const pendente = await deps.db.buscarConversaPendente(msg.telefone);
   if (pendente) {
-    await tratarRespostaPendente(texto, pendente.id, pendente.contexto, perfil, base, deps);
+    await tratarRespostaPendente(
+      texto,
+      pendente.id,
+      pendente.contexto,
+      perfil,
+      colaboradores,
+      base,
+      deps,
+    );
     return;
   }
 
@@ -199,34 +211,54 @@ async function fluxoCriarTarefa(
   base: BaseLog,
   deps: Deps,
 ): Promise<void> {
-  const res = resolverResponsavel(interpretacao.responsavel, colaboradores);
+  const nomes = interpretacao.responsaveis.filter((n) => n.trim());
+
+  if (nomes.length === 0) {
+    await deps.whats.enviarMensagem(
+      base.telefone,
+      'Não entendi para quem é a tarefa. Pode dizer o nome da pessoa?',
+    );
+    await deps.db.registrarLog({ ...base, interpretacao, resultado: 'responsavel_nao_encontrado' });
+    return;
+  }
+
+  if (nomes.length > MAX_RESPONSAVEIS) {
+    await deps.whats.enviarMensagem(
+      base.telefone,
+      `Dá pra atribuir uma tarefa para no máximo ${MAX_RESPONSAVEIS} pessoas, e você citou ${nomes.length}.`,
+    );
+    await deps.db.registrarLog({ ...base, interpretacao, resultado: 'limite_responsaveis' });
+    return;
+  }
+
+  const res = resolverResponsaveis(nomes, colaboradores);
 
   if (res.tipo === 'ambiguo') {
-    const nomes = res.candidatos.map((c) => c.nome_completo);
-    const pergunta = `Encontrei mais de uma pessoa parecida com "${interpretacao.responsavel}": ${nomes.join(', ')}. Qual delas?`;
-    await deps.db.criarConversaPendente({
-      telefone: base.telefone,
-      clinica_id: perfil.clinica_id,
-      profile_id: perfil.id,
-      pergunta,
-      contexto: {
+    await perguntarResponsavelAmbiguo(
+      {
         tipo: 'responsavel',
         titulo: interpretacao.titulo,
         descricao: interpretacao.descricao,
         prazo: interpretacao.prazo,
         horario: interpretacao.horario,
-        candidatos: res.candidatos.map(({ id, nome_completo }) => ({ id, nome_completo })),
+        mensagem: interpretacao.mensagem,
+        resolvidos: res.resolvidos,
+        pendentes: [res.nome, ...res.restantes],
+        candidatos: res.candidatos,
       },
-    });
-    await deps.whats.enviarMensagem(base.telefone, pergunta);
-    await deps.db.registrarLog({ ...base, interpretacao, resultado: 'esclarecimento_solicitado' });
+      res.nome,
+      perfil,
+      base,
+      interpretacao,
+      deps,
+    );
     return;
   }
 
   if (res.tipo === 'nao_encontrado') {
     await deps.whats.enviarMensagem(
       base.telefone,
-      `Não encontrei ninguém chamado "${interpretacao.responsavel}" na sua clínica. Pode conferir o nome?`,
+      `Não encontrei ninguém chamado "${res.nome}" na sua clínica. Pode conferir o nome?`,
     );
     await deps.db.registrarLog({ ...base, interpretacao, resultado: 'responsavel_nao_encontrado' });
     return;
@@ -234,15 +266,41 @@ async function fluxoCriarTarefa(
 
   await criarEConfirmar(
     perfil,
-    res.colaborador,
+    res.colaboradores,
     interpretacao.titulo,
     interpretacao.descricao,
     interpretacao.prazo,
     interpretacao.horario,
+    interpretacao.mensagem,
     { ...base },
     interpretacao,
     deps,
   );
+}
+
+async function perguntarResponsavelAmbiguo(
+  contexto: Extract<ContextoPendente, { tipo: 'responsavel' }>,
+  nome: string,
+  perfil: Perfil,
+  base: BaseLog,
+  interpretacao: Interpretacao,
+  deps: Deps,
+): Promise<void> {
+  const nomes = contexto.candidatos.map((c) => c.nome_completo);
+  const pergunta = `Encontrei mais de uma pessoa parecida com "${nome}": ${nomes.join(', ')}. Qual delas?`;
+  await deps.db.criarConversaPendente({
+    telefone: base.telefone,
+    clinica_id: perfil.clinica_id,
+    profile_id: perfil.id,
+    pergunta,
+    contexto: {
+      ...contexto,
+      resolvidos: contexto.resolvidos.map(({ id, nome_completo }) => ({ id, nome_completo })),
+      candidatos: contexto.candidatos.map(({ id, nome_completo }) => ({ id, nome_completo })),
+    },
+  });
+  await deps.whats.enviarMensagem(base.telefone, pergunta);
+  await deps.db.registrarLog({ ...base, interpretacao, resultado: 'esclarecimento_solicitado' });
 }
 
 async function tratarRespostaPendente(
@@ -250,6 +308,7 @@ async function tratarRespostaPendente(
   conversaId: string,
   contexto: ContextoPendente,
   perfil: Perfil,
+  colaboradores: Colaborador[],
   base: BaseLog,
   deps: Deps,
 ): Promise<void> {
@@ -271,21 +330,67 @@ async function tratarRespostaPendente(
   }
 
   await deps.db.resolverConversa(conversaId);
+
+  const resolvidos = [...contexto.resolvidos];
+  if (!resolvidos.some((c) => c.id === res.colaborador.id)) resolvidos.push(res.colaborador);
+
+  // Os nomes seguintes podem gerar uma nova rodada de desambiguação.
+  const restantes = contexto.pendentes.slice(1);
+  const seguintes = resolverResponsaveis(restantes, colaboradores);
+
+  if (seguintes.tipo === 'nao_encontrado') {
+    await deps.whats.enviarMensagem(
+      base.telefone,
+      `Não encontrei ninguém chamado "${seguintes.nome}" na sua clínica. Pode conferir o nome?`,
+    );
+    await deps.db.registrarLog({ ...base, resultado: 'responsavel_nao_encontrado' });
+    return;
+  }
+
+  if (seguintes.tipo === 'ambiguo') {
+    await perguntarResponsavelAmbiguo(
+      {
+        tipo: 'responsavel',
+        titulo: contexto.titulo,
+        descricao: contexto.descricao,
+        prazo: contexto.prazo,
+        horario: contexto.horario,
+        mensagem: contexto.mensagem,
+        resolvidos: [...resolvidos, ...seguintes.resolvidos],
+        pendentes: [seguintes.nome, ...seguintes.restantes],
+        candidatos: seguintes.candidatos,
+      },
+      seguintes.nome,
+      perfil,
+      base,
+      { tipo: 'criar_tarefa', responsaveis: contexto.pendentes, titulo: contexto.titulo },
+      deps,
+    );
+    return;
+  }
+
+  const finais = [...resolvidos];
+  for (const c of seguintes.colaboradores) {
+    if (!finais.some((x) => x.id === c.id)) finais.push(c);
+  }
+
   await criarEConfirmar(
     perfil,
-    res.colaborador,
+    finais,
     contexto.titulo,
     contexto.descricao,
     contexto.prazo,
     contexto.horario,
+    contexto.mensagem,
     base,
     {
       tipo: 'criar_tarefa',
-      responsavel: res.colaborador.nome_completo,
+      responsaveis: finais.map((c) => c.nome_completo),
       titulo: contexto.titulo,
       descricao: contexto.descricao,
       prazo: contexto.prazo,
       horario: contexto.horario,
+      mensagem: contexto.mensagem,
     },
     deps,
   );
@@ -335,11 +440,12 @@ async function tratarRespostaConcluir(
 
 async function criarEConfirmar(
   perfil: Perfil,
-  responsavel: Colaborador,
+  responsaveis: Colaborador[],
   titulo: string,
   descricao: string | undefined,
   prazo: string | undefined,
   horario: string | undefined,
+  mensagem: string | undefined,
   base: BaseLog,
   interpretacao: Interpretacao,
   deps: Deps,
@@ -353,34 +459,38 @@ async function criarEConfirmar(
     return;
   }
 
+  const nomes = responsaveis.map((r) => r.nome_completo);
   const resultado = await deps.one.criarTarefa({
     clinica_id: perfil.clinica_id,
     criado_por_profile_id: perfil.id,
-    responsavel_nome: responsavel.nome_completo,
+    responsavel_nome: nomes[0],
+    responsavel_id: responsaveis[0].id,
+    responsaveis: responsaveis.map((r) => r.id),
+    responsaveis_nomes: nomes,
     titulo,
     descricao,
     prazo,
     horario: horario ?? null,
+    mensagem_personalizada: mensagem,
   });
 
-  if (resultado.sucesso) {
-    const sufixoHorario = horario ? ` às ${horario}` : '';
-    const sufixoPrazo = prazo ? ` (prazo: ${prazo}${sufixoHorario})` : sufixoHorario;
-    await deps.whats.enviarMensagem(
-      base.telefone,
-      `✅ Tarefa criada para ${responsavel.nome_completo}: "${titulo}"${sufixoPrazo}.`,
-    );
-    await deps.db.registrarLog({
-      ...base,
-      interpretacao,
-      resultado: 'tarefa_criada',
-      tarefa_id: resultado.tarefa_id,
-    });
-  } else {
+  if (!resultado.sucesso) {
     await deps.whats.enviarMensagem(
       base.telefone,
       `Não consegui criar a tarefa: ${resultado.erro ?? 'erro desconhecido'}.`,
     );
     await deps.db.registrarLog({ ...base, interpretacao, resultado: 'erro' });
+    return;
   }
+
+  await deps.whats.enviarMensagem(
+    base.telefone,
+    montarConfirmacaoCriacao(nomes, titulo, prazo, horario),
+  );
+  await deps.db.registrarLog({
+    ...base,
+    interpretacao,
+    resultado: 'tarefa_criada',
+    tarefa_id: resultado.tarefa_id,
+  });
 }

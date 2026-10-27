@@ -37,3 +37,38 @@ export function resolverResponsavel<T extends Colaborador>(
 
   return { tipo: 'nao_encontrado' };
 }
+
+export type ResultadoResolucaoLista<T extends Colaborador> =
+  | { tipo: 'todos'; colaboradores: T[] }
+  | { tipo: 'ambiguo'; nome: string; candidatos: T[]; resolvidos: T[]; restantes: string[] }
+  | { tipo: 'nao_encontrado'; nome: string };
+
+/**
+ * Resolve vários nomes de uma vez, parando no primeiro ambíguo para que o
+ * chamador possa perguntar. Nomes repetidos (ou que caem na mesma pessoa) são
+ * deduplicados.
+ */
+export function resolverResponsaveis<T extends Colaborador>(
+  nomes: string[],
+  colaboradores: T[],
+): ResultadoResolucaoLista<T> {
+  const resolvidos: T[] = [];
+
+  for (let i = 0; i < nomes.length; i++) {
+    const res = resolverResponsavel(nomes[i], colaboradores);
+
+    if (res.tipo === 'nao_encontrado') return { tipo: 'nao_encontrado', nome: nomes[i] };
+    if (res.tipo === 'ambiguo') {
+      return {
+        tipo: 'ambiguo',
+        nome: nomes[i],
+        candidatos: res.candidatos,
+        resolvidos,
+        restantes: nomes.slice(i + 1),
+      };
+    }
+    if (!resolvidos.some((c) => c.id === res.colaborador.id)) resolvidos.push(res.colaborador);
+  }
+
+  return { tipo: 'todos', colaboradores: resolvidos };
+}

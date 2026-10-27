@@ -81,8 +81,111 @@ describe('POST /notificar', () => {
     await app.close();
   });
 
-  it('responde 500 quando o envio falha', async () => {
+  it('multi-responsáveis: lista a equipe na perspectiva do destinatário', async () => {
+    const { deps, estado } = criarDepsMock();
+    const app = criarServidor(deps, cfg);
+
+    const r = await app.inject({
+      method: 'POST',
+      url: '/notificar',
+      headers: { authorization: `Bearer ${cfg.WHATSAPP_SERVICE_SECRET}` },
+      payload: {
+        ...bodyValido,
+        dados: {
+          ...bodyValido.dados,
+          destinatario_id: 'p-carla',
+          responsaveis: [
+            { profile_id: 'p-carla', nome: 'Carla Lima' },
+            { profile_id: 'p-ana', nome: 'Ana Souza' },
+            { profile_id: 'p-vitor', nome: 'Vitor Almeida' },
+          ],
+          mensagem_personalizada: 'é prioridade da semana',
+        },
+      },
+    });
+
+    expect(r.statusCode).toBe(200);
+    const texto = estado.enviadas[0].texto;
+    expect(texto).toContain('Foi atribuída uma tarefa para você e equipe: você, Ana Souza e Vitor Almeida.');
+    expect(texto).not.toContain('Carla Lima');
+    expect(texto).toContain('Entregar relatório');
+    expect(texto).toContain('(prazo: 30/09 às 14:00)');
+    expect(texto).toContain('💬 _é prioridade da semana_');
+    expect(texto).toContain('— enviado por Ana Souza');
+    await app.close();
+  });
+
+  it('um único responsável fala só "para você"', async () => {
+    const { deps, estado } = criarDepsMock();
+    const app = criarServidor(deps, cfg);
+
+    await app.inject({
+      method: 'POST',
+      url: '/notificar',
+      headers: { authorization: `Bearer ${cfg.WHATSAPP_SERVICE_SECRET}` },
+      payload: {
+        ...bodyValido,
+        dados: {
+          ...bodyValido.dados,
+          destinatario_id: 'p-carla',
+          responsaveis: [{ profile_id: 'p-carla', nome: 'Carla Lima' }],
+        },
+      },
+    });
+
+    expect(estado.enviadas[0].texto).toContain('Foi atribuída uma tarefa para você.');
+    expect(estado.enviadas[0].texto).not.toContain('equipe');
+    await app.close();
+  });
+
+  it('rejeita responsaveis sem destinatario_id com 400', async () => {
+    const { deps, estado } = criarDepsMock();
+    const app = criarServidor(deps, cfg);
+
+    const r = await app.inject({
+      method: 'POST',
+      url: '/notificar',
+      headers: { authorization: `Bearer ${cfg.WHATSAPP_SERVICE_SECRET}` },
+      payload: {
+        ...bodyValido,
+        dados: {
+          ...bodyValido.dados,
+          responsaveis: [{ profile_id: 'p-carla', nome: 'Carla Lima' }],
+        },
+      },
+    });
+
+    expect(r.statusCode).toBe(400);
+    expect(estado.enviadas).toHaveLength(0);
+    await app.close();
+  });
+
+  it('rejeita mais de 5 responsáveis com 400', async () => {
     const { deps } = criarDepsMock();
+    const app = criarServidor(deps, cfg);
+
+    const r = await app.inject({
+      method: 'POST',
+      url: '/notificar',
+      headers: { authorization: `Bearer ${cfg.WHATSAPP_SERVICE_SECRET}` },
+      payload: {
+        ...bodyValido,
+        dados: {
+          ...bodyValido.dados,
+          destinatario_id: 'p-1',
+          responsaveis: Array.from({ length: 6 }, (_, i) => ({
+            profile_id: `p-${i}`,
+            nome: `Pessoa ${i}`,
+          })),
+        },
+      },
+    });
+
+    expect(r.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('responde 500 quando o envio falha', async () => {    const { deps } = criarDepsMock();
     deps.whats.enviarMensagem = async () => {
       throw new Error('wasender fora do ar');
     };

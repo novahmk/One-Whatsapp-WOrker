@@ -85,23 +85,21 @@ function estadoPadrao(): EstadoMock {
   };
 }
 
-// Interpretador determinístico: acha um colaborador citado no texto (nome completo ou primeiro nome).
-function interpretarMock(
-  texto: string,
-  colaboradores: string[],
-): Interpretacao {
+// Interpretador determinístico: acha os colaboradores citados no texto (nome completo ou primeiro nome).
+function interpretarMock(texto: string, colaboradores: string[]): Interpretacao {
   const t = normalizar(texto);
 
-  const nomeCompleto = colaboradores.find((n) => t.includes(normalizar(n)));
-  if (nomeCompleto) {
-    return { tipo: 'criar_tarefa', responsavel: nomeCompleto, titulo: texto };
+  const citados = colaboradores.filter((n) => t.includes(normalizar(n)));
+  if (citados.length > 0) {
+    return { tipo: 'criar_tarefa', responsaveis: citados, titulo: texto };
   }
 
-  const primeiroNome = colaboradores
+  const primeirosNomes = colaboradores
     .map((n) => normalizar(n).split(/\s+/)[0])
-    .find((p) => new RegExp(`\\b${p}\\b`).test(t));
-  if (primeiroNome) {
-    return { tipo: 'criar_tarefa', responsavel: primeiroNome, titulo: texto };
+    .filter((p) => new RegExp(`\\b${p}\\b`).test(t));
+  const unicos = [...new Set(primeirosNomes)];
+  if (unicos.length > 0) {
+    return { tipo: 'criar_tarefa', responsaveis: unicos, titulo: texto };
   }
 
   return {
@@ -173,13 +171,10 @@ export function criarDepsMock(parcial: Partial<EstadoMock> = {}): {
     one: {
       async criarTarefa(body) {
         estado.tarefas.push(body);
-        const responsavel = estado.perfis.find(
-          (p) => p.nome_completo === body.responsavel_nome,
-        );
         return {
           sucesso: true,
           tarefa_id: `mock-tarefa-${estado.tarefas.length}`,
-          responsavel_profile_id: responsavel?.id,
+          responsavel_profile_id: body.responsaveis[0],
         };
       },
       async concluirTarefa(body) {

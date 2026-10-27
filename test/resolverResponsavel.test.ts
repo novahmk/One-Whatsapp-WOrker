@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolverResponsavel } from '../src/core/resolverResponsavel';
+import { resolverResponsavel, resolverResponsaveis } from '../src/core/resolverResponsavel';
 
 const colaboradores = [
   { id: '1', nome_completo: 'Vitor Almeida' },
@@ -43,5 +43,43 @@ describe('resolverResponsavel', () => {
 
   it('não encontra alvo vazio', () => {
     expect(resolverResponsavel('  ', colaboradores).tipo).toBe('nao_encontrado');
+  });
+});
+
+describe('resolverResponsaveis', () => {
+  it('resolve vários nomes de uma vez', () => {
+    const r = resolverResponsaveis(['Carla', 'joao pereira'], colaboradores);
+    expect(r.tipo).toBe('todos');
+    if (r.tipo === 'todos') {
+      expect(r.colaboradores.map((c) => c.id)).toEqual(['3', '4']);
+    }
+  });
+
+  it('deduplica quando dois nomes caem na mesma pessoa', () => {
+    const r = resolverResponsaveis(['Carla', 'Carla Lima'], colaboradores);
+    expect(r.tipo).toBe('todos');
+    if (r.tipo === 'todos') {
+      expect(r.colaboradores).toHaveLength(1);
+    }
+  });
+
+  it('para no primeiro ambíguo guardando resolvidos e restantes', () => {
+    const r = resolverResponsaveis(['Carla', 'Vitor', 'joao pereira'], colaboradores);
+    expect(r.tipo).toBe('ambiguo');
+    if (r.tipo === 'ambiguo') {
+      expect(r.nome).toBe('Vitor');
+      expect(r.resolvidos.map((c) => c.id)).toEqual(['3']);
+      expect(r.restantes).toEqual(['joao pereira']);
+      expect(r.candidatos.map((c) => c.id).sort()).toEqual(['1', '2']);
+    }
+  });
+
+  it('reporta qual nome não foi encontrado', () => {
+    const r = resolverResponsaveis(['Carla', 'Roberta'], colaboradores);
+    expect(r).toMatchObject({ tipo: 'nao_encontrado', nome: 'Roberta' });
+  });
+
+  it('lista vazia resolve para nenhum responsável', () => {
+    expect(resolverResponsaveis([], colaboradores)).toMatchObject({ tipo: 'todos' });
   });
 });
