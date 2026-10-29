@@ -76,6 +76,7 @@ function estadoPadrao(): EstadoMock {
         nome: 'Carla Lima',
         tarefas_hoje: ['Enviar relatório mensal'],
         tarefas_atrasadas: ['Atualizar prontuários (26/09)'],
+        link_tarefas: 'https://onedashboard.app/m/tarefas',
       },
     ],
     agenda: {

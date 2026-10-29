@@ -108,7 +108,9 @@ Todas as chamadas usam o header `Authorization: Bearer {WHATSAPP_SERVICE_SECRET}
 
 `GET {ONE_APP_URL}/api/public/whatsapp/avisos-do-dia[?profile_id=...&data=YYYY-MM-DD]`
 — sem filtros: todos que devem ser avisados hoje; com filtros: agenda de uma pessoa/data
-— resposta: `{ dia, avisos: [{ profile_id, telefone, nome, tarefas_hoje: string[], tarefas_atrasadas: string[] }] }`
+— resposta: `{ dia, avisos: [{ profile_id, telefone, nome, tarefas_hoje: string[], tarefas_atrasadas: string[], link_tarefas?: string }] }`
+  (`link_tarefas` = tela mobile de tarefas do colaborador, anexada ao final da mensagem;
+  quando ausente ou vazio, o worker usa `{ONE_APP_URL}/m/tarefas`)
 
 `GET {ONE_APP_URL}/api/public/whatsapp/perfil?telefone=5511999999999`
 — só retorna perfil de telefone **verificado**; `perfil: null` caso contrário

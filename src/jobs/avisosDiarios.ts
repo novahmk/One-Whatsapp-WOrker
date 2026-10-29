@@ -27,7 +27,10 @@ export async function executarAvisos(
     if (aviso.tarefas_hoje.length === 0 && aviso.tarefas_atrasadas.length === 0) continue;
 
     try {
-      await notificarAgenda(deps, aviso.profile_id, dia, { dedupe: true });
+      await notificarAgenda(deps, aviso.profile_id, dia, {
+        dedupe: true,
+        baseUrl: cfg.ONE_APP_URL,
+      });
     } catch (e) {
       console.error(`Falha ao enviar aviso para ${aviso.telefone}:`, e);
     }

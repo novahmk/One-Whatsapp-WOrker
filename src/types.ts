@@ -144,6 +144,8 @@ export interface AvisoPessoa {
   nome: string;
   tarefas_hoje: string[];
   tarefas_atrasadas: string[];
+  /** Tela mobile onde o colaborador conclui/cancela as tarefas. */
+  link_tarefas?: string;
 }
 
 export interface FiltroAvisos {

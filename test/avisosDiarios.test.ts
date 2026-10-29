@@ -15,6 +15,9 @@ describe('avisosDiarios', () => {
     expect(estado.enviadas).toHaveLength(1);
     expect(estado.enviadas[0].telefone).toBe(TELEFONE_COLABORADORA);
     expect(estado.enviadas[0].texto).toContain('Enviar relatório mensal');
+    expect(estado.enviadas[0].texto).toContain(
+      '📱 Veja e gerencie suas tarefas por aqui: https://onedashboard.app/m/tarefas',
+    );
     expect(estado.logs.at(-1)).toMatchObject({ tipo: 'aviso_diario', resultado: 'aviso_enviado' });
   });
 
@@ -72,5 +75,48 @@ describe('avisosDiarios', () => {
     });
     expect(msg).toContain('*Tarefas para hoje:*');
     expect(msg).not.toContain('Tarefas em atraso');
+  });
+
+  it('montarMensagemAviso usa o link_tarefas do aviso', () => {
+    const msg = montarMensagemAviso({
+      profile_id: 'p1',
+      telefone: 'x',
+      nome: 'Carla Lima',
+      tarefas_hoje: ['Enviar relatório'],
+      tarefas_atrasadas: [],
+      link_tarefas: 'https://clinica.exemplo.com/m/tarefas',
+    });
+    expect(msg).toContain(
+      '📱 Veja e gerencie suas tarefas por aqui: https://clinica.exemplo.com/m/tarefas',
+    );
+  });
+
+  it('montarMensagemAviso cai no ONE_APP_URL e depois no padrão quando link_tarefas vem vazio', () => {
+    const base = {
+      profile_id: 'p1',
+      telefone: 'x',
+      nome: 'Carla Lima',
+      tarefas_hoje: ['Enviar relatório'],
+      tarefas_atrasadas: [],
+      link_tarefas: '',
+    };
+
+    expect(montarMensagemAviso(base, 'https://staging.onedashboard.app/')).toContain(
+      'https://staging.onedashboard.app/m/tarefas',
+    );
+    expect(montarMensagemAviso(base)).toContain('https://onedashboard.app/m/tarefas');
+  });
+
+  it('montarMensagemAviso não duplica o link quando a tarefa já traz um', () => {
+    const msg = montarMensagemAviso({
+      profile_id: 'p1',
+      telefone: 'x',
+      nome: 'Carla Lima',
+      tarefas_hoje: ['Revisar https://onedashboard.app/m/tarefas'],
+      tarefas_atrasadas: [],
+      link_tarefas: 'https://onedashboard.app/m/tarefas',
+    });
+    expect(msg.match(/\/m\/tarefas/g)).toHaveLength(1);
+    expect(msg).not.toContain('Veja e gerencie suas tarefas por aqui');
   });
 });
